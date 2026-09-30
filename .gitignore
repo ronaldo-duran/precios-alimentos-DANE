@@ -1,0 +1,20 @@
+# Datos: no se versionan (ver README para regenerarlos con `make ingest`)
+data/raw/*
+data/processed/*
+data/incoming/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/incoming/.gitkeep
+
+# Modelos entrenados (artefactos pesados); sí se versionan metadata.json y el log
+models/*
+!models/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/

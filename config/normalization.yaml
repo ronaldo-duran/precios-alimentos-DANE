@@ -1,0 +1,20 @@
+# Diccionario versionado de normalización de nombres.
+# Los nombres de plazas y productos cambian con los años; este archivo mapea
+# el nombre histórico -> nombre canónico. Cada entrada lleva la evidencia que
+# la justifica para que sea auditable.
+
+plazas:
+  # Renombre confirmado por rangos de fecha casi disjuntos:
+  #   "Cali, Santa Helena"  2020-02-01 -> 2022-02-08  (5.801 filas)
+  #   "Cali, Santa Elena"   2022-01-04 -> presente    (14.268 filas)
+  # Solapamiento de ~5 semanas durante la transición.
+  "Cali, Santa Helena": "Cali, Santa Elena"
+
+  # Renombre confirmado por rangos disjuntos, sin solapamiento:
+  #   "Pereira, La 41"         2020-02-04 -> 2025-07-10 (15.605 filas)
+  #   "Pereira, La 41-Impala"  2025-07-15 -> presente   (3.296 filas)
+  "Pereira, La 41-Impala": "Pereira, La 41"
+
+productos:
+  # Variantes de espaciado observadas en el servicio del DANE.
+  "Piña *": "Piña*"

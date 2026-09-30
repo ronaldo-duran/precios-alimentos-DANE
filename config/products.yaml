@@ -1,0 +1,57 @@
+# Alcance de la v1: productos y plazas.
+# Los nombres `sipsa` deben coincidir EXACTAMENTE con artiNombre / fuenNombre
+# del servicio del DANE, DESPUÉS de aplicar config/normalization.yaml.
+# El asterisco forma parte del nombre en SIPSA: denota un agregado de variedades.
+
+productos:
+  - id: papa_negra
+    sipsa: "Papa negra*"
+    etiqueta: "Papa negra"
+  - id: papa_criolla
+    sipsa: "Papa criolla"
+    etiqueta: "Papa criolla"
+  - id: tomate
+    sipsa: "Tomate*"
+    etiqueta: "Tomate"
+  - id: cebolla_cabezona_blanca
+    sipsa: "Cebolla cabezona blanca"
+    etiqueta: "Cebolla cabezona blanca"
+  - id: platano_harton_verde
+    sipsa: "Plátano hartón verde"
+    etiqueta: "Plátano hartón verde"
+  - id: yuca
+    sipsa: "Yuca*"
+    etiqueta: "Yuca"
+  - id: zanahoria
+    sipsa: "Zanahoria"
+    etiqueta: "Zanahoria"
+  - id: mango_tommy
+    sipsa: "Mango tommy"
+    etiqueta: "Mango tommy"
+
+plazas:
+  - id: bogota_corabastos
+    sipsa: "Bogotá, D.C., Corabastos"
+    ciudad: "Bogotá"
+    etiqueta: "Corabastos"
+  - id: medellin_central_mayorista
+    sipsa: "Medellín, Central Mayorista de Antioquia"
+    ciudad: "Medellín"
+    etiqueta: "Central Mayorista"
+  - id: bucaramanga_centroabastos
+    sipsa: "Bucaramanga, Centroabastos"
+    ciudad: "Bucaramanga"
+    etiqueta: "Centroabastos"
+  - id: cucuta_cenabastos
+    sipsa: "Cúcuta, Cenabastos"
+    ciudad: "Cúcuta"
+    etiqueta: "Cenabastos"
+
+# Series (producto x plaza) excluidas explícitamente, con su motivo.
+# Se excluyen ANTES de validar, para que no disparen la regla de faltantes.
+exclusiones:
+  - producto: papa_negra
+    plaza: cucuta_cenabastos
+    motivo: >-
+      Serie descontinuada: la última cotización es del 2022-02-19 (106 semanas de
+      349). No se interpola porque no es un hueco, es un cierre de serie.

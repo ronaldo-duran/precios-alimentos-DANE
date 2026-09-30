@@ -1,0 +1,40 @@
+# Reglas explícitas de limpieza y validación. Cambiar un umbral aquí cambia
+# el comportamiento del pipeline sin tocar código.
+
+agregacion:
+  # Diario -> semanal. Mediana, no promedio: en el histórico hay errores de
+  # digitación de un solo día (p.ej. Tomate* en Popayán a 250 COP/kg frente a
+  # una mediana de ~2.400). La mediana los absorbe; el promedio los propaga.
+  estadistico: mediana
+  # Semana ISO que empieza el lunes. La etiqueta de la semana es su lunes.
+  inicio_semana: lunes
+  # Mínimo de cotizaciones diarias para que una semana cuente como observada.
+  min_dias_por_semana: 1
+  # Se descarta la última semana si tiene menos días que esto respecto al
+  # máximo observado en la serie (evita el sesgo de la semana en curso).
+  descartar_semana_parcial: true
+
+limites:
+  # Un precio mayorista por kg fuera de este rango es un error de captura,
+  # no una señal. Rango observado en 2020-2026: 250 - 273.333 COP/kg.
+  precio_kg_min: 100.0
+  precio_kg_max: 500000.0
+
+outliers:
+  # Marcar (no borrar): z-score robusto sobre el log-retorno semanal.
+  # MAD es resistente a los propios outliers que busca.
+  metodo: mad_log_retorno
+  umbral_z: 5.0
+  # Piso de relevancia. Si una serie es muy plana su MAD tiende a cero y el
+  # z-score dispara con variaciones triviales del 1%. Un movimiento debe ser
+  # de al menos este tamaño para considerarse outlier, pase lo que pase con z.
+  # Referencia: la volatilidad semanal típica de estas series es del 8-9%.
+  salto_relativo_min: 0.15
+  # Salto semanal absoluto que se marca siempre, aunque z no lo detecte.
+  salto_relativo_max: 1.0
+
+series:
+  # Una serie con más faltantes que esto se excluye del modelado.
+  max_pct_faltantes: 10.0
+  # Historia mínima para que walk-forward tenga sentido.
+  min_semanas: 104
