@@ -39,12 +39,21 @@ CATEGORICAS: tuple[str, ...] = ("producto_id", "plaza_id")
 LLAVES: tuple[str, ...] = ("semana", "t", "y")
 
 
-def construir_features(panel: pd.DataFrame) -> pd.DataFrame:
+def construir_features(
+    panel: pd.DataFrame,
+    *,
+    exogenas: Sequence[str] = (),
+    horizontes: Sequence[int] = (1, 2, 3, 4),
+) -> pd.DataFrame:
     """Calcula la matriz de features sobre el panel semanal reindexado.
 
     Args:
         panel: salida de `clean`, con una fila por serie y semana calendario
             (las semanas faltantes presentes con `precio_kg` NaN).
+        exogenas: bloques exógenos a añadir ("calendario", "enso"). Vacío por
+            defecto: la ablación los enciende de uno en uno.
+        horizontes: horizontes para los que se añade el calendario de la
+            semana objetivo.
 
     Returns:
         Un `DataFrame` con las llaves, el precio observado `y` y las features.
@@ -69,6 +78,8 @@ def construir_features(panel: pd.DataFrame) -> pd.DataFrame:
     out["semana_cos"] = np.cos(angulo)
     out["mes"] = out["semana"].dt.month
 
+    out = _anadir_exogenas(out, exogenas, horizontes)
+
     for col in CATEGORICAS:
         out[col] = out[col].astype("category")
 
@@ -78,6 +89,30 @@ def construir_features(panel: pd.DataFrame) -> pd.DataFrame:
         len(columnas_features(out)),
         out.groupby(list(CATEGORICAS), observed=True).ngroups,
     )
+    return out
+
+
+def _anadir_exogenas(
+    out: pd.DataFrame, exogenas: Sequence[str], horizontes: Sequence[int]
+) -> pd.DataFrame:
+    """Une los bloques exógenos por semana.
+
+    Son features de calendario, iguales para todas las series de una misma
+    semana: se unen por `semana`, no por serie.
+    """
+    desconocidos = set(exogenas) - {"calendario", "enso"}
+    if desconocidos:
+        raise ValueError(f"Bloques exógenos desconocidos: {sorted(desconocidos)}")
+    if not exogenas:
+        return out
+
+    from precios.features.exogenas import features_calendario, features_enso
+
+    semanas = out["semana"]
+    if "calendario" in exogenas:
+        out = out.join(features_calendario(semanas, horizontes), on="semana")
+    if "enso" in exogenas:
+        out = out.join(features_enso(semanas), on="semana")
     return out
 
 

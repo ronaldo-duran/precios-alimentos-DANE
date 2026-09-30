@@ -249,6 +249,11 @@ def cargar_importancias() -> pd.DataFrame | None:
     return _leer("importancia_features.csv")
 
 
+@st.cache_data(show_spinner=False)
+def cargar_ablacion() -> pd.DataFrame | None:
+    return _leer("ablacion.csv")
+
+
 @st.cache_resource(show_spinner=False)
 def etiquetas() -> tuple[dict[str, str], dict[str, str]]:
     """Mapa id -> etiqueta legible para productos y plazas.

@@ -5,7 +5,7 @@
 # en los runners de CI, y un PY equivocado falla con un error poco claro.
 PY := $(if $(wildcard .venv/Scripts/python.exe),.venv/Scripts/python,.venv/bin/python)
 
-.PHONY: help setup ingest validate clean tune evaluate train forecast reconcile pipeline test lint app
+.PHONY: help setup ingest validate clean tune evaluate ablacion train forecast reconcile pipeline test lint app
 
 help:
 	@echo "make setup     - crea el entorno e instala dependencias"
@@ -14,6 +14,7 @@ help:
 	@echo "make clean     - normaliza, agrega a semanal y escribe el panel"
 	@echo "make tune      - busqueda limitada de hiperparametros de LightGBM"
 	@echo "make evaluate  - backtest walk-forward de todos los modelos"
+	@echo "make ablacion  - mide cuanto aporta cada bloque de variables exogenas"
 	@echo "make train     - entrena el modelo de produccion y lo registra"
 	@echo "make forecast  - pronostica y anexa al log en vivo (append-only)"
 	@echo "make reconcile - compara el log con los precios reales publicados"
@@ -25,7 +26,7 @@ help:
 
 setup:
 	uv venv --python 3.12
-	uv pip install -e ".[dev,models,app]"
+	uv pip install -e ".[dev,models,app,exogenas]"
 
 ingest:
 	$(PY) -m precios.pipeline.ingest
@@ -41,6 +42,9 @@ tune:
 
 evaluate:
 	$(PY) -m precios.pipeline.evaluate
+
+ablacion:
+	$(PY) -m precios.pipeline.ablacion
 
 train:
 	$(PY) -m precios.pipeline.train

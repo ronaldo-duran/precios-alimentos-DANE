@@ -18,6 +18,7 @@ import pandas as pd
 
 from precios.cleaning.aggregate import agregar_semanal, reindexar_semanas
 from precios.cleaning.normalize import (
+    canonizar_contra_alcance,
     colapsar_duplicados_diarios,
     filtrar_alcance,
     normalizar_nombres,
@@ -62,6 +63,7 @@ def clean(
 
     df = validate(origen)
     df = normalizar_nombres(df, norm)
+    df = canonizar_contra_alcance(df, scope)
     df = colapsar_duplicados_diarios(df)
     df = filtrar_alcance(df, scope)
 

@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from _comun import (
+    cargar_ablacion,
     cargar_cobertura,
     cargar_desempeno_vivo,
     cargar_metricas_horizonte,
@@ -261,7 +262,51 @@ else:
             "no es mejor, es solo más cómodo de mirar."
         )
 
-# --- 4. El registro en vivo -------------------------------------------------
+# --- 4. ¿Aportan las variables exógenas? ------------------------------------
+st.divider()
+st.subheader("¿Aportan las variables exógenas?")
+
+ablacion = cargar_ablacion()
+if ablacion is None:
+    falta_artefacto("ablacion.csv", "make ablacion")
+else:
+    st.markdown(
+        """
+Mismo walk-forward, mismos orígenes, mismos hiperparámetros y misma semilla;
+lo único que cambia es el bloque de features. Cualquier diferencia es
+atribuible al bloque.
+
+La columna que manda es **reservados**: son los orígenes que no se usaron para
+elegir hiperparámetros. Si el signo no coincide entre las dos columnas, la
+mejora no es de fiar.
+"""
+    )
+    vista = ablacion[ablacion["variante"] != "base"].copy()
+    tabla_abl = vista[
+        ["variante", "h", "n_features", "delta_todos_pct", "delta_reservados_pct"]
+    ].rename(
+        columns={
+            "variante": "Variante",
+            "h": "Horizonte",
+            "n_features": "Features",
+            "delta_todos_pct": "Δ todos (%)",
+            "delta_reservados_pct": "Δ reservados (%)",
+        }
+    )
+    st.dataframe(
+        tabla_abl.style.format({"Δ todos (%)": "{:+.2f}", "Δ reservados (%)": "{:+.2f}"}),
+        hide_index=True,
+        use_container_width=True,
+    )
+    mejor = vista.loc[vista["delta_reservados_pct"].idxmax()]
+    st.caption(
+        f"Mejor caso: `{mejor['variante']}` a h={int(mejor['h'])}, "
+        f"{mejor['delta_reservados_pct']:+.2f}% sobre los orígenes reservados. "
+        "Positivo significa mejor que el modelo sin exógenas."
+    )
+
+
+# --- 5. El registro en vivo -------------------------------------------------
 st.divider()
 st.subheader("Registro en vivo")
 

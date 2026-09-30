@@ -93,7 +93,7 @@ Bucaramanga (Centroabastos), Cúcuta (Cenabastos).
 
 ```bash
 uv venv --python 3.12
-uv pip install -e ".[dev]"
+uv pip install -e ".[dev,models,app,exogenas]"
 make pipeline
 ```
 
@@ -117,6 +117,7 @@ regenera desde el servicio del DANE en poco más de un minuto.
 | `validate` | `diario.parquet` | detiene el pipeline si el esquema o los valores no cuadran |
 | `clean` | `diario.parquet` | `data/processed/semanal.parquet`, `reporte_series.csv` |
 | `tune` | `semanal.parquet` | `config/lgbm_params.yaml`, `busqueda_hiperparametros.csv` |
+| `ablacion` | `semanal.parquet` | `ablacion.csv`, `ablacion_por_producto.csv` |
 | `evaluate` | `semanal.parquet` | `backtest.parquet`, `metricas_por_horizonte.csv`, `metricas_por_serie.csv`, `cobertura_intervalos.csv`, `degradacion_por_regimen.csv`, `semanas_choque.csv`, `importancia_features.csv` |
 | `train` | `semanal.parquet` | `models/<fecha>_<hash>/` + `models/latest.json` |
 | `forecast` | `models/latest.json` | `forecasts_log.csv`, `alertas_log.csv` (append-only) |
@@ -641,6 +642,230 @@ ver cuántas contribuyeron.
 
 ---
 
+## Normalización de nombres propios
+
+Los nombres de lugares colombianos aparecen escritos de formas incontables.
+Una sola ciudad puede ser `Bogotá`, `bogota`, `BOGOTÁ D.C.`, `Bogota, D. C.`,
+`Distrito Capital de Bogotá`... y Cúcuta es oficialmente `San José de Cúcuta`.
+
+Esto no es una preocupación teórica. Dos casos reales de este proyecto:
+
+- **SIPSA** renombró `Cali, Santa Helena` a `Cali, Santa Elena` en 2022, y
+  `Pereira, La 41` a `Pereira, La 41-Impala` en 2025.
+- **IDEAM** publica **79 grafías distintas de departamento** para 33
+  departamentos reales, y cambió `ANTIOQUIA` por `Antioquia` el 12 de agosto de
+  2026. Un filtro por la grafía vieja devuelve datos que se detienen
+  silenciosamente dos meses antes, sin error ni aviso.
+
+Enumerar todas las variantes en un diccionario es insostenible. La estrategia
+de `src/precios/cleaning/nombres.py` es reducir cualquier grafía a una **clave**
+sin tildes, sin mayúsculas, sin puntuación y sin espacios:
+
+```
+Bogotá, D.C.   ->  bogotadc
+BOGOTA D. C.   ->  bogotadc
+bogotá dc      ->  bogotadc
+```
+
+Las **35 formas de escribir Bogotá colapsan en 5 claves**, y `config/nombres.yaml`
+solo tiene que cubrir esas cinco. Lo que la clave no resuelve son los nombres
+de verdad distintos —`San José de Cúcuta` frente a `Cúcuta`, `Santa Helena`
+frente a `Santa Elena`— y esos sí van al diccionario, que queda corto y
+auditable.
+
+La clave respeta lo que debe distinguir: `San José de Cúcuta` y
+`San José del Guaviare` no colapsan, ni `Santa Elena` con `Santa Helena`.
+
+El ETL aplica esto contra el alcance configurado, así que si mañana SIPSA
+escribe `BOGOTÁ, D.C., CORABASTOS` en mayúsculas, la serie no desaparece.
+
+---
+
+## Verificación de fuentes exógenas
+
+Antes de implementar nada se verificaron las cuatro fuentes candidatas. Dos se
+implementaron y dos se descartaron; el porqué es tan útil como el resultado.
+
+### Implementadas
+
+**Calendario de festivos.** Paquete `holidays` (MIT). Implementa correctamente
+la **Ley Emiliani**, que traslada varios festivos al lunes siguiente: en 2026
+Reyes pasa del 6 al 12 de enero y San José del 19 al 23 de marzo. Determinista,
+sin red, sin rezago.
+
+Es la única feature del proyecto que **puede mirar hacia adelante sin cometer
+leakage**: los festivos de 2027 ya se conocen hoy. Por eso se le da al modelo
+el calendario de la semana objetivo, no solo el de la semana del origen.
+
+> Dato curioso que salió en la verificación: el calendario colombiano **cambió
+> en 2026**, de 18 a 19 festivos.
+
+**ENSO / índice ONI.** NOAA CPC, 23 KB de texto, 1950 → presente, sin
+autenticación. Se rezaga **2 meses** antes de unirlo a la semana, porque la
+NOAA publica cada trimestre móvil con retraso.
+
+La limitación es de diseño experimental, no técnica: en la ventana 2020-2026
+hay 79 meses pero solo **~5 episodios independientes**.
+
+```
+2020-09 → 2021-04   La Niña   (8 meses)
+2021-09 → 2023-01   La Niña   (17 meses)
+2023-06 → 2024-04   El Niño   (11 meses, pico 2,0)
+2024-05 → 2025-09   neutral   (17 meses)
+2025-10 → hoy       El Niño   (en desarrollo, ONI +1,80)
+```
+
+Con cinco eventos, cualquier "efecto ENSO" está confundido con todo lo demás
+que ocurrió en esos mismos periodos. Se implementó igual, para poder medirlo.
+
+### Descartadas, y por qué
+
+**Abastecimiento SIPSA** (`promedioAbasSipsaMesMadr`). La fuente funciona: 40 MB,
+164.274 registros, 194 productos, 2020-02 → 2026-07. Pero **faltan 21 de 78
+meses (27%), y todo 2021 está ausente** — enero a diciembre completos. Es
+justo el año del paro nacional, el episodio más interesante del histórico.
+Imputar ahí sería inventar el dato exactamente donde está la señal.
+
+Además los nombres no coinciden con los de precios (`Papa negra*` frente a
+`Papa parda pastusa` / `Papa capira` / `Papa única`), es mensual contra un
+modelo semanal, y el volumen del mes *t* se publica después del mes *t*.
+
+**Clima / IDEAM** (`s54a-sgyg`). Técnicamente resuelto: es un dataset Socrata
+tabular de verdad con **292.620.859 filas** desde 2003 hasta ayer, y la
+agregación del lado del servidor funciona (3,6 s por mes y departamento).
+
+Se descartó por un problema de fondo: **las plazas son donde se cotiza, no
+donde se produce**. La papa de Corabastos viene de Cundinamarca, Boyacá y
+Nariño; el tomate de Cenabastos, de Norte de Santander. El servicio no trae el
+departamento de origen, así que mapear producto → región productora es
+conocimiento agronómico que habría que codificar a mano y defender. Es un
+proyecto en sí mismo, no una feature.
+
+
+---
+
+## Resultados: ¿aportan las variables exógenas?
+
+Mismo walk-forward, mismos 61 orígenes, mismos hiperparámetros, misma semilla.
+Lo único que cambia entre variantes es el bloque de features, así que cualquier
+diferencia es atribuible al bloque.
+
+Se reportan dos columnas: **todos** los orígenes y los **reservados** (los que
+no se usaron para elegir hiperparámetros). Si el signo no coincide entre ambas,
+la mejora no es reproducible y no cuenta.
+
+| Variante | Features | h=1 | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|---:|---:|
+| `calendario` todos | 53 | **+1,28%** | +0,41% | +0,29% | −0,64% |
+| `calendario` reservados | | **+1,22%** | +0,05% | −0,02% | −0,29% |
+| `enso` todos | 28 | +0,73% | −0,20% | +0,56% | −1,01% |
+| `enso` reservados | | +0,59% | +1,03% | +0,04% | −0,49% |
+| `calendario+enso` todos | 58 | +1,06% | +0,17% | +1,45% | −0,63% |
+| `calendario+enso` reservados | | +0,98% | −0,59% | +0,99% | −0,20% |
+
+(delta de MASE frente al modelo sin exógenas; positivo = mejor)
+
+### El veredicto, sin adornos
+
+**Solo hay un efecto reproducible en toda la tabla: el calendario a un horizonte
+de una semana, +1,2%.** Es el único caso donde las dos columnas coinciden en
+signo y casi en magnitud (+1,28% y +1,22%). Todo lo demás cambia de signo entre
+las dos columnas, que es exactamente el síntoma de estar midiendo ruido.
+
+Conviene dimensionar ese +1,2%: **treinta features nuevas para mejorar el MASE
+de 1,2000 a 1,1854**. Sigue siendo peor que 1 y sigue sin ganarle al naive por
+un margen que le importe a nadie.
+
+Dentro de ese efecto, el reparto por producto a h=1 vuelve a ser desigual:
+
+| Producto | Δ con calendario |
+|---|---:|
+| Cebolla cabezona blanca | **+4,57%** |
+| Papa negra | +2,44% |
+| Tomate | +1,87% |
+| Papa criolla | +1,86% |
+| Zanahoria | +0,56% |
+| Yuca | +0,30% |
+| Plátano hartón verde | −0,15% |
+| Mango tommy | −1,77% |
+
+**El ENSO no aporta nada**, tal como anticipaba la verificación: con ~5
+episodios en seis años, el modelo no puede separar su efecto de lo demás que
+ocurrió en esos mismos periodos. Los números lo confirman en vez de dejarlo en
+una intuición.
+
+Y un detalle que merece atención: **`calendario+enso` es peor que `calendario`
+solo** a h=1 (+0,98% frente a +1,22%). Añadir cinco features sin señal diluye
+las que sí la tienen. Más features no es mejor.
+
+### Qué se deja activado
+
+`config/exogenas.yaml` deja los dos bloques encendidos, pero la conclusión
+honesta es que **ninguno cambia el panorama**: a una semana el naive sigue
+siendo casi imbatible, y el margen a 2–4 semanas sigue viniendo del modelo
+global, no del calendario ni del clima.
+
+
+---
+
+## Lecciones aprendidas
+
+**1. Verificar la fuente antes de diseñar nada.** El proyecto arrancó apuntando
+a la API de Socrata de datos.gov.co. No existe: el dataset es un
+`federated_href`, una ficha de catálogo sin filas. Descubrirlo en la primera
+hora evitó construir un `SocrataSource` entero contra un servicio inexistente —
+y encontró algo mejor, un servicio SOAP oficial del DANE con datos diarios.
+
+**2. El baseline naive no es un hombre de paja.** Repetir el último precio le
+gana a ETS, a ARIMA y a los promedios móviles a un horizonte de una semana. El
+mejor modelo lo supera por un 2%, y solo gracias a dos productos de ocho. Un
+proyecto que no hubiera medido contra el naive habría reportado un MASE de 1,15
+como si fuera un logro.
+
+**3. Un promedio puede esconder el resultado entero.** "LightGBM le gana al
+naive en los cuatro horizontes" es cierto y engañoso: la mejora la produce casi
+solo el mango tommy. Contando combinaciones de serie por horizonte, gana en 70
+de 120, y a una semana **pierde más veces de las que gana**. El desglose por
+producto cambió la conclusión.
+
+**4. Un intervalo puede mentir sin que nada falle.** La regresión cuantílica de
+LightGBM promete 80% y cubre 65%. No lanza ningún error: simplemente es falso.
+Solo se ve si se mide la cobertura empírica, que es una línea de código que casi
+nadie escribe.
+
+**5. Y la cobertura marginal también esconde su propio fallo.** La calibración
+conformal cubre el 81% global. En semanas de choque cubre el **45%**. No es un
+bug: conformal garantiza cobertura *marginal*, no *condicional*. La garantía se
+cumple y el intervalo es inútil justo cuando alguien lo consultaría.
+
+**6. Los nombres propios son un problema de ingeniería, no de estilo.** IDEAM
+publica 79 grafías de departamento para 33 departamentos, y cambió de
+`ANTIOQUIA` a `Antioquia` sin avisar. SIPSA renombró dos plazas. Normalizar por
+clave —sin tildes, sin mayúsculas, sin puntuación, sin espacios— convierte 35
+formas de escribir Bogotá en cinco.
+
+**7. El leakage se cuela por donde no se mira.** El sitio obvio —el split— se
+cuida solo. El que casi se escapa fue la interpolación de semanas faltantes:
+hacerla sobre la serie completa antes de trocear rellena un hueco anterior al
+origen con datos posteriores. Hay que interpolar *dentro* de cada ventana.
+
+**8. `n_jobs=-1` puede ser ocho veces más lento.** Con 9.000 filas, sincronizar
+12 hilos de LightGBM cuesta más que el trabajo útil: 21 segundos por ajuste
+frente a 2,5. Los valores por defecto están pensados para datos grandes.
+
+**9. Afinar hiperparámetros casi nunca es donde está el problema.** La rejilla
+completa cubre un 2,8% de MASE entre la mejor y la peor configuración. El salto
+de calidad vino de elegir bien el objetivo (log-cambio en vez de nivel), no de
+buscar más.
+
+**10. Probar el pipeline completo encuentra cosas que los tests no.** Correr el
+ciclo semanal de punta a punta reveló que un commit cambia el hash del modelo,
+genera una versión nueva y duplica los pronósticos de la misma semana en el
+log. Ningún test unitario lo habría visto, porque cada pieza funcionaba bien.
+
+
+---
+
 ## Estado
 
 **Fase 1 (datos y limpieza): completa.** 37 tests en verde.
@@ -669,4 +894,6 @@ desplegable en Streamlit Community Cloud leyendo del repo.
 **Fase 6 (CI y automatización): completa.** 181 tests en verde. Workflow de
 tests en cada push y pipeline semanal con commit directo a `main`.
 
-Pendiente: variables exógenas (calendario, ENSO, clima, abastecimiento).
+**Fase 7 (variables exógenas): completa.** 304 tests en verde. Calendario y
+ENSO implementados y medidos con ablación; abastecimiento y clima descartados
+con su motivo documentado. Añadida una capa de canonización de nombres propios.

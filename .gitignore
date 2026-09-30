@@ -30,6 +30,8 @@ data/processed/*
 !data/processed/desempeno_alertas.csv
 !data/processed/alertas_reconciliadas.csv
 !data/processed/busqueda_hiperparametros.csv
+!data/processed/ablacion.csv
+!data/processed/ablacion_por_producto.csv
 
 # Modelos: los pesos son binarios pesados y se pueden regenerar con `make train`.
 # La metadata y los diagnósticos sí se versionan: son la trazabilidad.

@@ -20,6 +20,11 @@ models = [
     "statsforecast>=1.7",
     "scikit-learn>=1.5",
 ]
+exogenas = [
+    # Festivos colombianos, incluida la Ley Emiliani (traslado al lunes).
+    # El calendario cambia por ley: en 2026 Colombia pasó de 18 a 19 festivos.
+    "holidays>=0.60",
+]
 app = [
     "streamlit>=1.36",
     "plotly>=5.22",

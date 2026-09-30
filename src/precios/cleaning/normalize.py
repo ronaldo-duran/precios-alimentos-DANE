@@ -11,6 +11,7 @@ import logging
 
 import pandas as pd
 
+from precios.cleaning.nombres import clave
 from precios.config import Normalizacion, Scope
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,42 @@ def normalizar_nombres(df: pd.DataFrame, norm: Normalizacion) -> pd.DataFrame:
         n_cambios = int((antes != df[col]).sum())
         if n_cambios:
             log.info("Normalización de %s: %d filas reasignadas", col, n_cambios)
+    return df
+
+
+def canonizar_contra_alcance(df: pd.DataFrame, scope: Scope) -> pd.DataFrame:
+    """Reconcilia grafías distintas del mismo nombre contra el alcance.
+
+    Los nombres de `config/products.yaml` son la forma canónica. Cualquier
+    variante que solo difiera en mayúsculas, tildes, puntuación o espaciado
+    tiene la misma clave y se reasigna a la canónica.
+
+    No es hipotético: IDEAM cambió `ANTIOQUIA` por `Antioquia` de un día para
+    otro, y SIPSA escribe `Piña *` y `Piña*` indistintamente. Sin esto, un
+    cambio de grafía en el origen hace desaparecer la serie en silencio, que es
+    la peor forma de fallar.
+    """
+    df = df.copy()
+    for col, nombres in (
+        ("producto_sipsa", scope.nombres_sipsa_producto),
+        ("plaza_sipsa", scope.nombres_sipsa_plaza),
+    ):
+        indice = {clave(n): n for n in nombres}
+        presentes = set(df[col].dropna().unique())
+        reasignar = {
+            v: indice[clave(v)]
+            for v in presentes
+            if v not in nombres and clave(v) in indice
+        }
+        if reasignar:
+            n_filas = int(df[col].isin(reasignar).sum())
+            log.warning(
+                "%s: %d filas reasignadas por grafía (%s)",
+                col,
+                n_filas,
+                {k: v for k, v in list(reasignar.items())[:3]},
+            )
+            df[col] = df[col].replace(reasignar)
     return df
 
 

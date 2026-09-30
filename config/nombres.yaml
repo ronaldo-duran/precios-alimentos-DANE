@@ -1,0 +1,95 @@
+# Canonización de nombres propios.
+#
+# NO hace falta listar variantes de mayúsculas, tildes, puntuación ni
+# espaciado: `precios.cleaning.nombres.clave()` las absorbe todas reduciendo
+# cada grafía a una clave alfanumérica en minúsculas y sin acentos.
+#
+#   "Bogotá, D.C."  "BOGOTA D. C."  "bogotá dc"   ->  todas dan 'bogotadc'
+#
+# Aquí solo van los nombres ESTRUCTURALMENTE distintos: los que no se pueden
+# derivar unos de otros quitando ruido tipográfico.
+
+_nota: >-
+  Motivación empírica: IDEAM publica 79 grafías de departamento para 33
+  departamentos reales, y cambió de ANTIOQUIA a Antioquia el 2026-08-12. Sin
+  esta capa, un filtro por la grafía vieja pierde los datos nuevos sin avisar.
+
+ciudades:
+  "Bogotá, D.C.":
+    - "Bogotá"
+    - "Bogotá D.C."
+    - "Bogotá Distrito Capital"
+    - "Distrito Capital de Bogotá"
+    - "Bogotá Capital"
+    - "Distrito Capital"
+    - "Santafé de Bogotá"
+  "Cúcuta":
+    - "San José de Cúcuta"
+    - "Cúcuta, Norte de Santander"
+  "Medellín": []
+  "Bucaramanga": []
+  "Cali":
+    - "Santiago de Cali"
+  "Cartagena":
+    - "Cartagena de Indias"
+  "Santa Marta":
+    - "Santa Marta (Magdalena)"
+    - "Distrito de Santa Marta"
+  "Tunja": []
+  "Villavicencio": []
+  "Ibagué": []
+  "Neiva": []
+  "Pasto":
+    - "San Juan de Pasto"
+  "Popayán": []
+  "Manizales": []
+  "Pereira": []
+  "Armenia": []
+  "Montería": []
+  "Sincelejo": []
+  "Valledupar": []
+  "Barranquilla": []
+  "Tuluá": []
+
+departamentos:
+  "Bogotá, D.C.":
+    - "Bogotá"
+    - "Bogotá D.C."
+    - "Distrito Capital"
+    - "Santafé de Bogotá"
+  "Antioquia": []
+  "Atlántico": []
+  "Bolívar": []
+  "Boyacá": []
+  "Caldas": []
+  "Caquetá": []
+  "Casanare": []
+  "Cauca": []
+  "Cesar": []
+  "Córdoba": []
+  "Cundinamarca": []
+  "Huila": []
+  "La Guajira":
+    - "Guajira"
+  "Magdalena": []
+  "Meta": []
+  "Nariño": []
+  "Norte de Santander": []
+  "Quindío": []
+  "Risaralda": []
+  "Santander": []
+  "Sucre": []
+  "Tolima": []
+  "Valle del Cauca":
+    - "Valle"
+  "Arauca": []
+  "Amazonas": []
+  "Chocó": []
+  "Guainía": []
+  "Guaviare": []
+  "Putumayo": []
+  "San Andrés y Providencia":
+    - "Archipiélago de San Andrés, Providencia y Santa Catalina"
+    - "San Andrés"
+  "Vaupés": []
+  "Vichada": []

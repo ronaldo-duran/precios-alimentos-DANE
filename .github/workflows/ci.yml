@@ -33,7 +33,7 @@ jobs:
       - name: Crear entorno e instalar dependencias
         run: |
           uv venv --python 3.12
-          uv pip install -e ".[dev,models,app]"
+          uv pip install -e ".[dev,models,app,exogenas]"
 
       - name: Linter
         run: make lint

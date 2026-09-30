@@ -52,7 +52,7 @@ jobs:
       - name: Crear entorno e instalar dependencias
         run: |
           uv venv --python 3.12
-          uv pip install -e ".[dev,models,app]"
+          uv pip install -e ".[dev,models,app,exogenas]"
 
       # Los tests van ANTES del pipeline: si la suite está rota, no se commitea
       # nada. Un log append-only con filas generadas por código defectuoso no se

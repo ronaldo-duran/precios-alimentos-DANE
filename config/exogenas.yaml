@@ -1,0 +1,23 @@
+# Bloques de variables exógenas. Cada uno se activa por separado para poder
+# medirlo con ablación: mismo walk-forward, mismos orígenes, con y sin el bloque.
+#
+# Estado tras la verificación de fuentes (ver README):
+#   calendario  -> IMPLEMENTADO. Determinista, sin red, sin rezago.
+#   enso        -> IMPLEMENTADO. Fuente viva, pero solo ~5 episodios en la
+#                  ventana 2020-2026: se espera poca o ninguna señal.
+#   abastecimiento -> DESCARTADO. Falta el 27% de los meses y TODO 2021, justo
+#                  el año del paro. Imputar ahí sería inventar el dato donde
+#                  más importa.
+#   clima       -> DESCARTADO por ahora. La fuente sirve (IDEAM, agregación en
+#                  servidor), pero las plazas son donde se cotiza y no donde se
+#                  produce, y el servicio no trae el departamento de origen.
+
+bloques:
+  calendario: true
+  enso: true
+
+enso:
+  # Meses que se retrocede el ONI antes de unirlo a la semana. La NOAA publica
+  # cada trimestre movil con retraso; 2 meses evita usar un valor inexistente
+  # en esa fecha.
+  rezago_meses: 2
