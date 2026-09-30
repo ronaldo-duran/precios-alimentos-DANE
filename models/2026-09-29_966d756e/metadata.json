@@ -1,0 +1,299 @@
+{
+  "version": "2026-09-29_966d756e",
+  "entrenado_en": "2026-09-29T22:23:21",
+  "semana_inicio": "2020-01-27",
+  "semana_fin": "2026-09-21",
+  "n_series": 30,
+  "n_observaciones": 10395,
+  "productos": [
+    "cebolla_cabezona_blanca",
+    "mango_tommy",
+    "papa_criolla",
+    "papa_negra",
+    "platano_harton_verde",
+    "tomate",
+    "yuca",
+    "zanahoria"
+  ],
+  "plazas": [
+    "bogota_corabastos",
+    "bucaramanga_centroabastos",
+    "cucuta_cenabastos",
+    "medellin_central_mayorista"
+  ],
+  "horizontes": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "nivel_intervalo": 0.8,
+  "semilla": 42,
+  "params_lgbm": {
+    "num_leaves": 15,
+    "n_estimators": 300,
+    "min_child_samples": 60,
+    "reg_lambda": 1
+  },
+  "commit": "cf9ee77",
+  "radios_conformales": {
+    "1": 0.15313853384507434,
+    "2": 0.20967112551024658,
+    "3": 0.26951797843145464,
+    "4": 0.29196332529467894
+  },
+  "metricas": [
+    {
+      "modelo": "auto_arima",
+      "h": 1,
+      "mase": 1.176980549,
+      "mae": 271.3512441762,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "auto_arima",
+      "h": 2,
+      "mase": 1.602829501,
+      "mae": 371.0319882376,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "auto_arima",
+      "h": 3,
+      "mase": 2.0316002619,
+      "mae": 472.4170620026,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "auto_arima",
+      "h": 4,
+      "mase": 2.3206744168,
+      "mae": 542.0064068541,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "ets",
+      "h": 1,
+      "mase": 1.1904754322,
+      "mae": 278.0961662001,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "ets",
+      "h": 2,
+      "mase": 1.6541251422,
+      "mae": 392.5328093153,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "ets",
+      "h": 3,
+      "mase": 2.0849514597,
+      "mae": 495.576645286,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "ets",
+      "h": 4,
+      "mase": 2.3818586257,
+      "mae": 567.4416997192,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "lgbm_conformal",
+      "h": 1,
+      "mase": 1.2273273817,
+      "mae": 278.3035552926,
+      "cobertura_pct": 81.2087912088
+    },
+    {
+      "modelo": "lgbm_conformal",
+      "h": 2,
+      "mase": 1.673749319,
+      "mae": 376.2525612784,
+      "cobertura_pct": 81.2397147559
+    },
+    {
+      "modelo": "lgbm_conformal",
+      "h": 3,
+      "mase": 2.1455176355,
+      "mae": 473.4068281573,
+      "cobertura_pct": 79.3084522503
+    },
+    {
+      "modelo": "lgbm_conformal",
+      "h": 4,
+      "mase": 2.4330179585,
+      "mae": 536.5569365044,
+      "cobertura_pct": 78.6381109281
+    },
+    {
+      "modelo": "lgbm_cuantil",
+      "h": 1,
+      "mase": 1.1541916636,
+      "mae": 265.0136414522,
+      "cobertura_pct": 74.2307692308
+    },
+    {
+      "modelo": "lgbm_cuantil",
+      "h": 2,
+      "mase": 1.5624385062,
+      "mae": 362.0736826184,
+      "cobertura_pct": 70.9818979704
+    },
+    {
+      "modelo": "lgbm_cuantil",
+      "h": 3,
+      "mase": 1.991555422,
+      "mae": 455.5647126633,
+      "cobertura_pct": 67.7277716795
+    },
+    {
+      "modelo": "lgbm_cuantil",
+      "h": 4,
+      "mase": 2.2727854272,
+      "mae": 510.7565781202,
+      "cobertura_pct": 64.6897309171
+    },
+    {
+      "modelo": "naive",
+      "h": 1,
+      "mase": 1.1790098275,
+      "mae": 278.6757127193,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive",
+      "h": 2,
+      "mase": 1.6556389017,
+      "mae": 397.5999452355,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive",
+      "h": 3,
+      "mase": 2.0807338891,
+      "mae": 497.8002739726,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive",
+      "h": 4,
+      "mase": 2.3478335169,
+      "mae": 562.6038925439,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_deriva",
+      "h": 1,
+      "mase": 1.1820279051,
+      "mae": 279.0978796556,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_deriva",
+      "h": 2,
+      "mase": 1.6633201244,
+      "mae": 398.9984680163,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_deriva",
+      "h": 3,
+      "mase": 2.0968429252,
+      "mae": 501.2708794441,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_deriva",
+      "h": 4,
+      "mase": 2.3707848367,
+      "mae": 567.7407839899,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_estacional",
+      "h": 1,
+      "mase": 5.3588545613,
+      "mae": 1035.633004386,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_estacional",
+      "h": 2,
+      "mase": 5.1925361726,
+      "mae": 1005.4371303395,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_estacional",
+      "h": 3,
+      "mase": 5.1946913019,
+      "mae": 1003.0999178082,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "naive_estacional",
+      "h": 4,
+      "mase": 5.2769583853,
+      "mae": 1015.1829769737,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_4",
+      "h": 1,
+      "mase": 1.6172315061,
+      "mae": 391.6999383224,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_4",
+      "h": 2,
+      "mase": 1.9121840769,
+      "mae": 461.523774644,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_4",
+      "h": 3,
+      "mase": 2.3264894266,
+      "mae": 560.8456369863,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_4",
+      "h": 4,
+      "mase": 2.5805066315,
+      "mae": 621.0721285636,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_8",
+      "h": 1,
+      "mase": 2.1687372376,
+      "mae": 523.9272820724,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_8",
+      "h": 2,
+      "mase": 2.3948237669,
+      "mae": 575.7550041073,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_8",
+      "h": 3,
+      "mase": 2.7662673064,
+      "mae": 665.7589109589,
+      "cobertura_pct": null
+    },
+    {
+      "modelo": "promedio_movil_8",
+      "h": 4,
+      "mase": 2.9994191988,
+      "mae": 718.7836828399,
+      "cobertura_pct": null
+    }
+  ]
+}

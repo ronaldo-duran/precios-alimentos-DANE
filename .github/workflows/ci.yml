@@ -1,0 +1,53 @@
+name: CI
+
+# Tests y linter en cada push y cada PR. No toca datos ni red: toda la suite
+# corre sobre datos sintéticos, así que no depende del servicio del DANE.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Crear entorno e instalar dependencias
+        run: |
+          uv venv --python 3.12
+          uv pip install -e ".[dev,models,app]"
+
+      - name: Linter
+        run: make lint
+
+      - name: Tests
+        run: make test
+
+      - name: Verificar que la configuración es coherente
+        # `load_scope` valida IDs duplicados y exclusiones que apunten a series
+        # inexistentes. Un products.yaml roto debe fallar aquí, no el lunes a
+        # las 8 de la mañana en mitad del pipeline semanal.
+        run: |
+          .venv/bin/python -c "
+          from precios.config import load_scope, load_reglas, load_evaluacion, load_normalizacion
+          s = load_scope(); load_reglas(); load_evaluacion(); load_normalizacion()
+          print(f'Alcance OK: {s.n_series_esperadas} series esperadas')
+          "

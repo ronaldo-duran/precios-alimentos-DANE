@@ -1,0 +1,152 @@
+name: Pipeline semanal
+
+# Ciclo semanal: ingesta, limpieza, reentrenamiento, pronóstico y reconciliación,
+# con commit directo a main de los logs y la metadata.
+#
+# Cuándo: lunes a las 13:00 UTC (8:00 a.m. en Colombia). Para entonces la semana
+# anterior ya está completa —SIPSA cotiza de lunes a sábado— y los datos del
+# propio lunes todavía no se han publicado (el DANE actualiza a las 2:00 p.m.),
+# así que el pipeline descarta la semana en curso sin ambigüedad.
+#
+# NO se ejecuta `evaluate`: el backtest completo son 61 orígenes por 9 modelos,
+# unos 30 minutos, y sus métricas no cambian de forma útil de una semana a otra.
+# Se corre a mano cuando se toca el modelado.
+
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuente:
+        description: "De dónde traer los datos"
+        type: choice
+        options: [soap, manual, ninguna]
+        default: soap
+      forzar_entrenamiento:
+        description: "Reentrenar aunque no haya semanas nuevas"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Nunca dos corridas a la vez: ambas escribirían en el log append-only y la
+# segunda en llegar chocaría al hacer push.
+concurrency:
+  group: pipeline-semanal
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Crear entorno e instalar dependencias
+        run: |
+          uv venv --python 3.12
+          uv pip install -e ".[dev,models,app]"
+
+      # Los tests van ANTES del pipeline: si la suite está rota, no se commitea
+      # nada. Un log append-only con filas generadas por código defectuoso no se
+      # puede limpiar después sin romper su propia garantía.
+      - name: Tests
+        run: make test
+
+      - name: Ingesta
+        id: ingesta
+        if: ${{ inputs.fuente != 'ninguna' }}
+        run: |
+          FUENTE="${{ inputs.fuente || 'soap' }}"
+          .venv/bin/python -m precios.pipeline.ingest --fuente "$FUENTE"
+
+      - name: ¿Hay semanas nuevas?
+        id: novedad
+        run: |
+          .venv/bin/python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          ruta = pathlib.Path("data/processed/ingest_status.json")
+          if not ruta.exists():
+              # Sin ingesta (fuente=ninguna) se continúa: puede haber un
+              # diario.parquet previo con el que reentrenar.
+              print("hay_nuevos=true")
+              print("detalle=sin ingest_status.json; se continúa")
+          else:
+              st = json.loads(ruta.read_text(encoding="utf-8"))
+              print(f"hay_nuevos={str(st['hay_datos_nuevos']).lower()}")
+              print(f"detalle=datos hasta {st['fecha_max']} (previo: {st['fecha_max_previa']})")
+          PY
+
+      - name: Resumen de la ingesta
+        run: echo "::notice::${{ steps.novedad.outputs.detalle }}"
+
+      - name: Limpieza y validación
+        if: ${{ steps.novedad.outputs.hay_nuevos == 'true' || inputs.forzar_entrenamiento }}
+        run: make clean
+
+      - name: Entrenamiento y registro
+        if: ${{ steps.novedad.outputs.hay_nuevos == 'true' || inputs.forzar_entrenamiento }}
+        run: make train
+
+      - name: Pronóstico y registro en vivo
+        if: ${{ steps.novedad.outputs.hay_nuevos == 'true' || inputs.forzar_entrenamiento }}
+        run: make forecast
+
+      # La reconciliación corre SIEMPRE que haya logs, incluso sin datos nuevos:
+      # un pronóstico emitido hace semanas puede resolverse ahora aunque el
+      # origen no haya avanzado.
+      - name: Reconciliación del log en vivo
+        if: ${{ !failure() && !cancelled() }}
+        run: make reconcile
+
+      - name: Sin novedades
+        if: ${{ steps.novedad.outputs.hay_nuevos != 'true' && !inputs.forzar_entrenamiento }}
+        run: echo "::notice::Sin semanas nuevas; no se reentrena. ${{ steps.novedad.outputs.detalle }}"
+
+      - name: Commit de artefactos y logs
+        if: ${{ !failure() && !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # `git add` respeta .gitignore: entran los logs del registro en vivo,
+          # la metadata del modelo y los derivados de la app; no entran los
+          # pesos .joblib ni diario.parquet.
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "::notice::Nada que commitear"
+            exit 0
+          fi
+
+          ULTIMA=$(.venv/bin/python -c "
+          import pandas as pd
+          print(pd.read_parquet('data/processed/semanal.parquet')['semana'].max().date())
+          ")
+
+          git commit -m "Pipeline semanal: datos hasta ${ULTIMA}" \
+                     -m "Ejecutado por el workflow semanal. Los pronósticos del log son append-only: nunca se reescriben filas anteriores." \
+                     -m "[skip ci]"
+
+          # Si alguien empujó a main mientras corría el pipeline, se rebasa en
+          # vez de fallar: el log es append-only, así que rebasar es seguro.
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Guardar diagnósticos si algo falla
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-${{ github.run_id }}
+          path: |
+            data/processed/ingest_status.json
+            data/processed/reporte_series.csv
+          retention-days: 14
+          if-no-files-found: ignore

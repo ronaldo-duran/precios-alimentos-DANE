@@ -116,6 +116,34 @@ def _reconciliar_pronosticos(log_pron: pd.DataFrame, panel: pd.DataFrame) -> pd.
         (recon["y_true"] >= recon["lo"]) & (recon["y_true"] <= recon["hi"]),
         np.nan,
     )
+    return _marcar_vigentes(recon)
+
+
+def _marcar_vigentes(recon: pd.DataFrame) -> pd.DataFrame:
+    """Marca, para cada objetivo, el pronóstico que estaba vigente.
+
+    Una misma semana objetivo puede tener pronósticos de varias versiones del
+    modelo: basta un commit para que el hash cambie y la corrida siguiente
+    registre una fila nueva. El log las conserva todas —es append-only y eso no
+    se negocia— pero promediarlas contaría la misma semana dos veces y le daría
+    doble peso frente a las demás.
+
+    Vigente es el pronóstico más reciente de cada objetivo: el que la app
+    estaba mostrando cuando llegó el dato real.
+    """
+    llaves = ["procedencia", "modelo", "producto_id", "plaza_id", "h", "semana_objetivo"]
+    orden = recon.sort_values(["fecha_pronostico", "version_modelo"])
+    ultimo = orden.groupby(llaves, observed=True, dropna=False).tail(1).index
+    recon = recon.copy()
+    recon["vigente"] = recon.index.isin(ultimo)
+
+    n_desplazados = int((~recon["vigente"]).sum())
+    if n_desplazados:
+        log.info(
+            "%d pronósticos quedaron desplazados por una versión posterior "
+            "(se conservan en el log, no se promedian)",
+            n_desplazados,
+        )
     return recon
 
 
@@ -150,7 +178,7 @@ def _resumir_desempeno(recon: pd.DataFrame) -> pd.DataFrame:
     out-of-sample, pero solo los `vivo` se escribieron antes de que ocurriera
     la semana, y esa diferencia es justamente lo que da valor al registro.
     """
-    resuelto = recon[recon["estado"] == "resuelto"]
+    resuelto = recon[(recon["estado"] == "resuelto") & recon["vigente"]]
     if resuelto.empty:
         log.warning(
             "Todavía no hay ningún pronóstico resuelto: el log es más nuevo que los datos"
@@ -174,6 +202,7 @@ def _resumir_desempeno(recon: pd.DataFrame) -> pd.DataFrame:
             "mae": float(g["error_abs"].mean()),
             "mase": float(np.nanmean(g["mase_punto"])),
             "sesgo": float(g["error"].mean()),
+            "n_versiones": int(g["version_modelo"].nunique()),
             "primera": str(g["semana_objetivo"].min().date()),
             "ultima": str(g["semana_objetivo"].max().date()),
         }

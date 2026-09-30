@@ -585,6 +585,62 @@ pequeño). Los pesados —`diario.parquet`, `backtest.parquet`,
 
 ---
 
+## Automatización
+
+Dos workflows en `.github/workflows/`.
+
+### `ci.yml` — en cada push y cada PR
+
+Linter, la suite completa de tests y una verificación de que los YAML de
+`config/` son coherentes. **No toca red ni datos**: toda la suite corre sobre
+datos sintéticos, así que un DANE caído no pone el CI en rojo.
+
+### `semanal.yml` — lunes a las 13:00 UTC (8:00 a.m. en Colombia)
+
+Ejecuta `ingest → clean → train → forecast → reconcile` y **commitea directo a
+`main`** los logs del registro en vivo, la metadata del modelo y los derivados
+que consume la app.
+
+Por qué el lunes a esa hora: SIPSA cotiza de lunes a sábado, así que la semana
+anterior ya está completa; y el DANE publica a las 2:00 p.m., así que los datos
+del propio lunes todavía no existen y el pipeline descarta la semana en curso
+sin ambigüedad.
+
+Decisiones del workflow que conviene conocer:
+
+- **Los tests corren ANTES del pipeline.** Si la suite está rota no se commitea
+  nada: un log append-only con filas generadas por código defectuoso no se
+  puede limpiar después sin romper su propia garantía.
+- **Si no hay semanas nuevas, no se reentrena.** `ingest` deja
+  `hay_datos_nuevos` en `ingest_status.json` y el workflow salta las etapas de
+  modelado. La reconciliación sí corre igualmente: un pronóstico emitido hace
+  semanas puede resolverse hoy aunque el origen no haya avanzado.
+- **`evaluate` no está en el ciclo semanal.** Son 61 orígenes por 9 modelos,
+  unos 30 minutos, y sus métricas no cambian de forma útil de una semana a
+  otra. Se corre a mano al tocar el modelado.
+- **La ingesta se puede desactivar.** `workflow_dispatch` acepta
+  `fuente: soap | manual | ninguna`, para trabajar con los archivos de
+  `data/incoming/` o para reentrenar sobre un consolidado previo.
+- **Una corrida a la vez** (`concurrency`), porque dos escribiendo en un log
+  append-only chocarían al hacer push.
+
+### Una sutileza del registro de modelos
+
+El hash de la versión incluye el commit, así que **cualquier cambio de código
+produce una versión nueva** aunque los datos no cambien. Es deliberado: reusar
+un modelo en silencio después de tocar el cálculo de features daría pronósticos
+atribuidos al código equivocado.
+
+El efecto secundario es que una misma semana objetivo puede acabar con
+pronósticos de dos versiones. El log **los conserva todos** —es append-only y
+eso no se negocia— pero la tabla de desempeño solo cuenta el más reciente de
+cada objetivo, el que la app estaba mostrando cuando llegó el dato real.
+Promediarlos le daría doble peso a esa semana. La columna `n_versiones` deja
+ver cuántas contribuyeron.
+
+
+---
+
 ## Estado
 
 **Fase 1 (datos y limpieza): completa.** 37 tests en verde.
@@ -610,4 +666,7 @@ append-only y alertas con umbral por producto.
 **Fase 5 (app de Streamlit): completa.** 176 tests en verde. Cuatro páginas,
 desplegable en Streamlit Community Cloud leyendo del repo.
 
-Pendiente: CI con GitHub Actions y variables exógenas.
+**Fase 6 (CI y automatización): completa.** 181 tests en verde. Workflow de
+tests en cada push y pipeline semanal con commit directo a `main`.
+
+Pendiente: variables exógenas (calendario, ENSO, clima, abastecimiento).

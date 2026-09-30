@@ -1,10 +1,9 @@
 # Pipeline de precios mayoristas SIPSA-DANE.
 # En Windows se ejecuta con Git Bash o WSL; PY apunta al venv creado por uv.
 
-PY := .venv/Scripts/python
-ifeq ($(OS),)
-PY := .venv/bin/python
-endif
+# Se detecta por el archivo y no por $(OS): esa variable no esta garantizada
+# en los runners de CI, y un PY equivocado falla con un error poco claro.
+PY := $(if $(wildcard .venv/Scripts/python.exe),.venv/Scripts/python,.venv/bin/python)
 
 .PHONY: help setup ingest validate clean tune evaluate train forecast reconcile pipeline test lint app
 

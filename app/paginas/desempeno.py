@@ -34,7 +34,7 @@ def _formatear_desempeno(tabla: pd.DataFrame) -> pd.DataFrame:
     """Prepara la tabla de desempeño en vivo para mostrarla."""
     cols = [
         "modelo", "h", "n", "mase", "mae", "sesgo",
-        "cobertura_pct", "primera", "ultima",
+        "cobertura_pct", "n_versiones", "primera", "ultima",
     ]
     existentes = [c for c in cols if c in tabla.columns]
     salida = tabla[existentes].copy()
@@ -47,6 +47,7 @@ def _formatear_desempeno(tabla: pd.DataFrame) -> pd.DataFrame:
             "mae": "MAE (COP/kg)",
             "sesgo": "Sesgo (COP/kg)",
             "cobertura_pct": "Cobertura (%)",
+            "n_versiones": "Versiones",
             "primera": "Desde",
             "ultima": "Hasta",
         }
@@ -269,6 +270,11 @@ st.markdown(
 Un backtest siempre se puede repetir hasta que salga bien. Un pronóstico
 **escrito antes de que ocurriera la semana**, no. Esta tabla acumula el error
 real de los pronósticos registrados en `forecasts_log.csv`.
+
+Si una misma semana recibió pronósticos de varias versiones del modelo, solo
+cuenta el más reciente: el que la app estaba mostrando cuando llegó el dato
+real. Los demás siguen en el log, pero promediarlos le daría doble peso a esa
+semana.
 """
 )
 

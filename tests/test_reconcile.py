@@ -161,3 +161,66 @@ def test_la_reconciliacion_es_idempotente():
     a = _reconciliar_pronosticos(log, _panel())
     b = _reconciliar_pronosticos(log, _panel())
     pd.testing.assert_frame_equal(a, b)
+
+
+# --- Varias versiones del modelo para el mismo objetivo ---------------------
+
+
+def test_marca_como_vigente_el_pronostico_mas_reciente():
+    """Un commit cambia el hash del modelo y la corrida siguiente vuelve a
+    registrar el mismo objetivo. El log las conserva; el resumen no las promedia.
+    """
+    viejo = _log(version_modelo="v1", fecha_pronostico="2026-02-16", y_pred=1300.0)
+    nuevo = _log(version_modelo="v2", fecha_pronostico="2026-02-17", y_pred=1390.0)
+    recon = _reconciliar_pronosticos(
+        pd.concat([viejo, nuevo], ignore_index=True), _panel()
+    )
+
+    assert len(recon) == 2  # nada se borra
+    vigentes = recon[recon["vigente"]]
+    assert len(vigentes) == 1
+    assert vigentes.iloc[0]["version_modelo"] == "v2"
+
+
+def test_el_resumen_no_cuenta_dos_veces_la_misma_semana():
+    viejo = _log(version_modelo="v1", fecha_pronostico="2026-02-16", y_pred=1300.0)
+    nuevo = _log(version_modelo="v2", fecha_pronostico="2026-02-17", y_pred=1390.0)
+    recon = _reconciliar_pronosticos(
+        pd.concat([viejo, nuevo], ignore_index=True), _panel()
+    )
+    resumen = _resumir_desempeno(recon)
+
+    assert resumen["n"].sum() == 1
+    # El error es el de la versión vigente (1400 - 1390), no el promedio.
+    assert resumen.iloc[0]["mae"] == pytest.approx(10.0)
+
+
+def test_el_resumen_reporta_cuantas_versiones_contribuyeron():
+    viejo = _log(version_modelo="v1", fecha_pronostico="2026-02-16")
+    nuevo = _log(
+        version_modelo="v2",
+        fecha_pronostico="2026-02-17",
+        h=2,
+        semana_objetivo=pd.Timestamp("2026-03-02"),
+    )
+    recon = _reconciliar_pronosticos(
+        pd.concat([viejo, nuevo], ignore_index=True), _panel()
+    )
+    resumen = _resumir_desempeno(recon)
+    assert set(resumen["n_versiones"]) == {1}  # cada horizonte tiene una versión
+
+
+def test_objetivos_distintos_de_la_misma_version_siguen_vigentes():
+    a = _log(h=1, semana_objetivo=pd.Timestamp("2026-02-23"))
+    b = _log(h=2, semana_objetivo=pd.Timestamp("2026-03-02"))
+    recon = _reconciliar_pronosticos(pd.concat([a, b], ignore_index=True), _panel())
+    assert recon["vigente"].all()
+
+
+def test_el_naive_y_el_modelo_no_se_desplazan_entre_si():
+    modelo = _log(modelo="lgbm_conformal")
+    naive = _log(modelo="naive", y_pred=1250.0)
+    recon = _reconciliar_pronosticos(
+        pd.concat([modelo, naive], ignore_index=True), _panel()
+    )
+    assert recon["vigente"].all()
