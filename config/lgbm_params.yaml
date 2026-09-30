@@ -1,0 +1,17 @@
+_procedencia:
+  generado_por: make tune (precios.pipeline.tune)
+  fecha: '2026-09-29'
+  semilla: 42
+  configuraciones_probadas: 6
+  origenes_busqueda: 104-220
+  origenes_evaluacion_reservados: 224-344
+  mase_busqueda: 1.8355
+  mase_peor_config: 1.8871
+  nota: Elegida sobre la mitad antigua de los orígenes. El registro completo está
+    en data/processed/busqueda_hiperparametros.csv. Editar a mano es válido; deja
+    constancia aquí si lo haces.
+params:
+  num_leaves: 15
+  n_estimators: 300
+  min_child_samples: 60
+  reg_lambda: 1

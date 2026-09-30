@@ -175,6 +175,21 @@ def load_normalizacion(path: Path | None = None) -> Normalizacion:
     )
 
 
+def load_lgbm_params(path: Path | None = None) -> dict[str, Any]:
+    """Lee la configuración de LightGBM elegida por `make tune`, si existe.
+
+    Devuelve `{}` cuando no se ha corrido la búsqueda, y entonces LightGBM usa
+    sus parámetros por defecto. El pipeline nunca falla por esto.
+    """
+    ruta = path or CONFIG_DIR / "lgbm_params.yaml"
+    if not ruta.exists():
+        log.info("Sin %s: LightGBM usará sus parámetros por defecto", ruta.name)
+        return {}
+    params = dict(_read_yaml(ruta).get("params", {}))
+    log.info("Hiperparámetros de la búsqueda: %s", params)
+    return params
+
+
 @lru_cache(maxsize=1)
 def load_evaluacion(path: Path | None = None) -> ConfigEvaluacion:
     """Lee `config/evaluation.yaml`."""

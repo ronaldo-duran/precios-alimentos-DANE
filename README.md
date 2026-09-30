@@ -102,6 +102,7 @@ Si no tienes `make` (habitual en Windows), cada etapa se invoca directamente:
 ```bash
 .venv/Scripts/python -m precios.pipeline.ingest
 .venv/Scripts/python -m precios.pipeline.clean
+.venv/Scripts/python -m precios.pipeline.evaluate
 .venv/Scripts/python -m pytest
 ```
 
@@ -115,7 +116,8 @@ regenera desde el servicio del DANE en poco más de un minuto.
 | `ingest` | SOAP del DANE | `data/raw/<operacion>_<fecha>.parquet`, `data/processed/diario.parquet`, `ingest_status.json` |
 | `validate` | `diario.parquet` | detiene el pipeline si el esquema o los valores no cuadran |
 | `clean` | `diario.parquet` | `data/processed/semanal.parquet`, `reporte_series.csv` |
-| `evaluate` | `semanal.parquet` | `backtest_baselines.parquet`, `metricas_por_horizonte.csv`, `metricas_por_serie.csv` |
+| `tune` | `semanal.parquet` | `config/lgbm_params.yaml`, `busqueda_hiperparametros.csv` |
+| `evaluate` | `semanal.parquet` | `backtest.parquet`, `metricas_por_horizonte.csv`, `metricas_por_serie.csv`, `cobertura_intervalos.csv`, `degradacion_por_regimen.csv`, `semanas_choque.csv`, `importancia_features.csv` |
 
 `ingest` es idempotente: si el origen no trae fechas posteriores a lo consolidado,
 no reescribe nada y lo deja anotado en `ingest_status.json` (`hay_datos_nuevos: false`),
@@ -147,6 +149,72 @@ Todas viven en `config/cleaning.yaml` y se pueden cambiar sin tocar código.
 - **Detección de outliers con MAD sobre log-retornos**, más un piso de relevancia
   del 15%. Sin ese piso, una serie casi plana tiene MAD ≈ 0 y el z-score marca
   variaciones del 1% como anomalías.
+
+---
+
+## Modelos
+
+| Modelo | Tipo | Intervalos |
+|---|---|---|
+| `naive` | último valor | no |
+| `naive_estacional` | valor de la semana del año anterior (lag 52) | no |
+| `promedio_movil_4` / `_8` | media de las últimas k semanas | no |
+| `naive_deriva` | naive más tendencia media | no |
+| `ets` | suavizado exponencial (statsforecast) | no |
+| `auto_arima` | ARIMA con órdenes automáticos (statsforecast) | no |
+| `lgbm_cuantil` | LightGBM global, regresión cuantílica | q10–q90 |
+| `lgbm_conformal` | LightGBM global, conformal split | calibrados |
+
+### Por qué ETS y ARIMA van sin estacionalidad
+
+Con datos semanales el periodo anual es 52. ETS y ARIMA estacionales con m=52
+tienen que estimar decenas de parámetros estacionales, son numéricamente
+frágiles y muy lentos. Y sobre todo: el naive estacional ya fracasó con
+MASE ~5,2, o sea que **la evidencia dice que no hay ciclo anual estable que
+explotar**. Forzar un componente estacional añadiría varianza sin señal.
+
+### Por qué el objetivo es el log-cambio
+
+El modelo global ve aguacate a 7.000 COP/kg y zanahoria a 1.000 en las mismas
+filas. Si predijera niveles, gastaría su capacidad en distinguir productos.
+Prediciendo `log(y[t+h] / y[t])`, todas las series hablan el mismo idioma y
+**"empatar con el naive" equivale exactamente a predecir cambio cero**, que es
+la comparación que interesa. El nivel se reconstruye como `y[t] · exp(pred)`.
+
+Se usa estrategia **directa** (un modelo por horizonte) en vez de iterar un
+modelo de un paso: evita acumular error de forma opaca y deja que cada horizonte
+aprenda su dinámica (a 1 semana manda la inercia; a 4, la reversión a la media).
+
+### Dos vías de incertidumbre, y por qué se comparan
+
+- **Regresión cuantílica**: LightGBM aprende directamente q10 y q90. Es barata,
+  pero nada garantiza que su cobertura empírica sea la nominal.
+- **Conformal split**: el modelo se entrena en un tramo y el ancho del intervalo
+  se calibra con **residuos fuera de muestra** de un tramo posterior que el
+  modelo nunca vio. Bajo intercambiabilidad garantiza la cobertura marginal.
+
+Con series de tiempo la intercambiabilidad no se cumple del todo (los residuos
+están correlacionados y el régimen cambia), así que la garantía es aproximada.
+Por eso el proyecto **mide** la cobertura empírica en lugar de darla por buena.
+
+### Búsqueda de hiperparámetros
+
+Rejilla fija de seis configuraciones, definida de antemano en
+`src/precios/models/busqueda.py`. Los orígenes se parten en dos: la **mitad
+antigua** elige la configuración, la **mitad reciente** se reserva para
+reportar. Buscar y reportar sobre los mismos orígenes produce una mejora que no
+existe fuera de la muestra. Se registran **todas** las configuraciones probadas
+en `data/processed/busqueda_hiperparametros.csv`, no solo la ganadora, y la
+elegida queda versionada en `config/lgbm_params.yaml` con su procedencia.
+
+**Resultado de la búsqueda, con su decepción incluida:** ganó la configuración
+más pequeña y regularizada (`num_leaves=15`, `n_estimators=300`,
+`min_child_samples=60`), coherente con tener solo ~9.000 filas de
+entrenamiento. Pero **la rejilla salió casi plana**: entre la mejor y la peor
+configuración hay un 2,8% de MASE (1,8355 frente a 1,8871). Trasladado a la
+evaluación final, afinar mejoró el MASE de 1,156 a 1,154 en h=1 y de 2,324 a
+2,273 en h=4. Es decir: **ajustar hiperparámetros aquí no es donde está el
+problema**, y seguir buscando más allá de esta rejilla sería perseguir ruido.
 
 ---
 
@@ -197,8 +265,155 @@ El tomate es el más difícil a una semana; el mango tommy es el que peor se
 degrada al alejarse el horizonte (32,6% a cuatro semanas), consistente con su
 estacionalidad de cosecha. Yuca y plátano son los más predecibles.
 
-Esta tabla es la vara contra la que se medirán ETS, ARIMA y LightGBM. Si no
-bajan de MASE 1,179 en h=1, el proyecto lo dirá.
+Esta tabla es la vara contra la que se miden ETS, ARIMA y LightGBM.
+
+---
+
+## Resultados: ¿alguien le gana al naive?
+
+61 orígenes, 30 series, horizontes 1–4. **65.691 pronósticos** de 9 modelos,
+todos medidos sobre exactamente los mismos orígenes.
+
+| Modelo | h=1 | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|---:|
+| `lgbm_cuantil` | **1,154** | **1,562** | **1,992** | **2,273** |
+| `auto_arima` | 1,177 | 1,603 | 2,032 | 2,321 |
+| `naive` | 1,179 | 1,656 | 2,081 | 2,348 |
+| `naive_deriva` | 1,182 | 1,663 | 2,097 | 2,371 |
+| `ets` | 1,190 | 1,654 | 2,085 | 2,382 |
+| `lgbm_conformal` | 1,227 | 1,674 | 2,146 | 2,433 |
+| `promedio_movil_4` | 1,617 | 1,912 | 2,326 | 2,581 |
+| `promedio_movil_8` | 2,169 | 2,395 | 2,766 | 2,999 |
+| `naive_estacional` | 5,359 | 5,193 | 5,195 | 5,277 |
+
+Sí: LightGBM y AutoARIMA le ganan al naive en los cuatro horizontes. Pero la
+mejora es **pequeña (1–5%)** y, sobre todo, el promedio esconde lo importante.
+
+### La mejora la produce casi un solo producto
+
+| Producto | h=1 naive | h=1 lgbm | mejora h=1 | mejora h=4 |
+|---|---:|---:|---:|---:|
+| **Mango tommy** | 1,170 | **0,915** | **+21,8%** | **+35,6%** |
+| Tomate | 1,245 | 1,158 | +7,0% | +8,2% |
+| Yuca | 1,140 | 1,130 | +0,9% | −11,2% |
+| Zanahoria | 1,238 | 1,245 | −0,6% | +1,0% |
+| Papa criolla | 1,194 | 1,210 | −1,3% | +3,4% |
+| Cebolla cabezona blanca | 1,009 | 1,024 | −1,5% | −7,4% |
+| Papa negra | 1,202 | 1,222 | −1,7% | −6,9% |
+| Plátano hartón verde | 1,238 | 1,277 | −3,2% | −0,8% |
+
+Quitando mango tommy y tomate, **LightGBM empata o pierde contra el naive**.
+Y contando combinaciones individuales de (serie × horizonte), solo gana en
+**70 de 120 (58,3%)**. A h=1 gana en el **46,7%**: a un horizonte de una semana
+**pierde más veces de las que gana**.
+
+Las features más importantes explican por qué: `ret_52`, `ret_26` y `rel_ma52`
+dominan. Es decir, el modelo sí encuentra estructura anual, pero **relativa**
+(dónde está el precio frente a su propio nivel de hace un año), no de nivel
+absoluto, que es lo que copia el naive estacional y por lo que fracasa. Y solo
+el mango tommy —fruta de cosecha marcada— tiene esa estructura con fuerza.
+
+### El régimen reciente es algo más favorable
+
+Sobre la mitad reservada de orígenes (224–344, los más recientes), la ventaja
+se concentra en horizontes largos en vez de cortos:
+
+| Modelo | h=1 | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|---:|
+| `lgbm_cuantil` | +0,6% | +4,6% | +7,0% | +7,1% |
+| `lgbm_conformal` | −1,1% | +4,4% | +6,5% | +5,7% |
+| `auto_arima` | +0,2% | +5,0% | +4,3% | +3,0% |
+| `ets` | −0,1% | +0,4% | −0,2% | −1,8% |
+
+(diferencia porcentual de MASE frente al naive; positivo = mejor)
+
+**A una semana no hay nada que hacer: el último precio es la mejor predicción.**
+A 2–4 semanas hay un margen real pero modesto, del 3 al 7%.
+
+---
+
+## Resultados: los intervalos de predicción
+
+Esta es la parte donde la diferencia entre métodos es grande y clara.
+Nivel nominal: **80%**.
+
+| Modelo | h=1 | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|---:|
+| `lgbm_conformal` | **81,2%** | **81,2%** | **79,3%** | **78,6%** |
+| `lgbm_cuantil` | 74,2% | 71,0% | 67,7% | 64,7% |
+
+**La regresión cuantílica miente, y cada vez más.** Su intervalo "del 80%" cubre
+el 74,2% a una semana y solo el **64,7%** a cuatro. La calibración conformal, en
+cambio, se queda entre el 78,6% y el 81,2% en todos los horizontes.
+
+El precio de esa honestidad es doble:
+
+1. **Intervalos más anchos**: ±33,3% del precio a h=1 frente a ±26,6% de la
+   cuantílica; a h=4, ±63,8% frente a ±46,0%.
+2. **Peor pronóstico puntual**: `lgbm_conformal` tiene MASE 1,227 frente a 1,154
+   de `lgbm_cuantil` a h=1, porque reserva 26 semanas para calibrar y entrena con
+   menos datos. Calibrar bien cuesta precisión.
+
+---
+
+## Análisis de fallos: dónde se rompe
+
+`config/episodios.yaml` nombra los episodios, pero la detección es data-driven:
+una semana es "de choque" si el movimiento **mediano** de todo el panel supera
+el percentil 90 de su propia distribución. Salen **35 semanas de 348**, y las
+más violentas se explican solas:
+
+| Semana | Movimiento mediano | Episodio |
+|---|---:|---|
+| 2021-05-03 | **63,7%** | Paro nacional y bloqueos de vías |
+| 2024-09-02 | 45,3% | Alta volatilidad 2024-Q3 |
+| 2020-03-16 | 41,5% | Inicio de la cuarentena |
+| 2024-09-09 | 34,0% | Alta volatilidad 2024-Q3 |
+| 2021-05-10 | 33,2% | Paro nacional |
+
+Las siete semanas más volátiles del histórico caen todas dentro de episodios
+conocidos. La detección no sabía nada de ellos.
+
+### Todos los modelos se rompen igual
+
+MASE a h=1, semanas normales frente a semanas de choque:
+
+| Modelo | Normal | Choque | Factor |
+|---|---:|---:|---:|
+| `naive` | 1,10 | 3,56 | ×3,24 |
+| `auto_arima` | 1,10 | 3,43 | ×3,12 |
+| `lgbm_cuantil` | 1,07 | 3,51 | ×3,27 |
+| `lgbm_conformal` | 1,15 | 3,48 | ×3,02 |
+
+(1.764 pronósticos en semanas normales frente a 60 en semanas de choque)
+
+**Ningún modelo aguanta un choque.** Todos triplican su error, y las diferencias
+entre ellos son ruido. Si un paro bloquea las vías, el precio de la semana
+siguiente no está en la historia.
+
+### Y los intervalos también se rompen — este es el hallazgo incómodo
+
+Cobertura del intervalo conformal del 80%, por régimen:
+
+| h | Semanas normales | Semanas de choque |
+|---|---:|---:|
+| 1 | 82,4% | **45,0%** |
+| 2 | 82,4% | 68,5% |
+| 3 | 79,5% | 75,0% |
+| 4 | 80,2% | 66,8% |
+
+La cobertura global del 81% es un **promedio que esconde el fallo justo cuando
+más importaría**. En una semana de choque el intervalo del 80% falla más de la
+mitad de las veces a un horizonte de una semana.
+
+No es un error de implementación: la predicción conformal garantiza cobertura
+**marginal**, no condicional. Promete acertar el 80% de las veces en promedio,
+no el 80% en cada régimen. Con series de tiempo, donde los choques rompen la
+intercambiabilidad, esa distinción deja de ser teórica.
+
+**La lectura práctica: estos intervalos son útiles en condiciones normales y no
+son de fiar durante un choque, que es exactamente cuando alguien querría
+consultarlos.** La app lo dice donde se ve.
 
 ---
 
@@ -214,5 +429,11 @@ queda fuera por 16,8% de faltantes.
 **Fase 2 (baselines y validación walk-forward): completa.** 74 tests en verde,
 incluidos los de ausencia de leakage y construcción de folds.
 
-Pendiente: modelos estadísticos y de gradient boosting con intervalos, registro
-de modelos y pronósticos, app, CI y variables exógenas.
+**Fase 3 (modelos estadísticos, LightGBM global e intervalos): completa.**
+115 tests en verde. 65.691 pronósticos de 9 modelos sobre los mismos orígenes.
+Conclusión corta: a una semana el naive es imbatible; a 2–4 semanas hay un
+3–7% de margen; los intervalos conformales están bien calibrados en promedio y
+fallan en los choques.
+
+Pendiente: registro de modelos y de pronósticos en vivo, app, CI y variables
+exógenas.

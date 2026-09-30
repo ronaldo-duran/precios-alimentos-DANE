@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from precios.evaluation.backtest import backtest_serie, preparar_train
 from precios.evaluation.splits import Fold, rolling_origins
@@ -106,3 +107,68 @@ def test_no_se_evaluan_semanas_sin_dato_observado():
     # h=2 apunta al índice 125, que es el hueco: no debe aparecer.
     assert 2 not in set(res["h"])
     assert {1, 3, 4} <= set(res["h"])
+
+
+# --- Modelos globales -------------------------------------------------------
+
+
+def _panel_para_global(n: int = 160, n_series: int = 4, semilla: int = 17) -> pd.DataFrame:
+    from .test_features import panel_sintetico
+
+    return panel_sintetico(n=n, n_series=n_series, semilla=semilla)
+
+
+def test_lgbm_global_no_usa_datos_posteriores_al_origen():
+    """Corromper el panel desde el origen no puede mover el pronóstico."""
+    from precios.features.build import anadir_objetivos, construir_features, filas_a_predecir
+    from precios.models.lgbm import LGBMGlobal
+
+    panel = _panel_para_global()
+    origen = 120
+    semana_corte = sorted(panel["semana"].unique())[origen - 1]
+
+    def predecir(p: pd.DataFrame) -> np.ndarray:
+        F = anadir_objetivos(construir_features(p), [1, 2])
+        modelo = LGBMGlobal(horizontes=(1, 2), cuantiles=(0.5,), semilla=1).fit(F, origen)
+        salida = modelo.predict(filas_a_predecir(F, origen))
+        return salida.sort_values(["producto_id", "h"])["y_pred"].to_numpy()
+
+    limpio = predecir(panel)
+
+    corrupto = panel.copy()
+    futuro = corrupto["semana"] > semana_corte
+    corrupto.loc[futuro, "precio_kg"] *= 100
+    corrupto.loc[futuro, ["precio_kg_min", "precio_kg_max"]] *= 100
+
+    np.testing.assert_allclose(limpio, predecir(corrupto), rtol=1e-12)
+
+
+def test_conformal_calibra_con_datos_que_el_modelo_no_vio():
+    """El tramo de calibración debe quedar fuera del entrenamiento propio."""
+    from precios.features.build import anadir_objetivos, construir_features
+    from precios.models.conformal import ConformalGlobal
+
+    panel = _panel_para_global()
+    F = anadir_objetivos(construir_features(panel), [1])
+    origen, n_calib = 140, 26
+
+    modelo = ConformalGlobal(horizontes=(1,), semanas_calibracion=n_calib, semilla=1)
+    modelo.fit(F, origen)
+
+    # El modelo interno se entrenó como si el origen fuera origen - n_calib.
+    t_max_entrenamiento = origen - n_calib - 1 - 1  # origen_propio - 1 - h
+    residuos = modelo._residuos_calibracion(F, origen, origen - n_calib, 1)
+    assert residuos.size > 0
+    # Toda fila de calibración es posterior al último dato de entrenamiento.
+    calibracion = F[(F["t"] > t_max_entrenamiento) & (F["t"] <= origen - 2)]
+    assert calibracion["t"].min() > t_max_entrenamiento
+
+
+def test_conformal_falla_si_el_origen_es_demasiado_temprano():
+    from precios.features.build import anadir_objetivos, construir_features
+    from precios.models.conformal import ConformalGlobal
+
+    F = anadir_objetivos(construir_features(_panel_para_global(n=60)), [1])
+    modelo = ConformalGlobal(horizontes=(1,), semanas_calibracion=26)
+    with pytest.raises(ValueError, match="demasiado temprano"):
+        modelo.fit(F, origen=20)

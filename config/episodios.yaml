@@ -1,0 +1,38 @@
+# Episodios de choque conocidos, para etiquetar el análisis de fallos.
+# Las fechas son aproximadas y se documentan como contexto, NO se usan para
+# entrenar: sirven para explicar dónde y por qué se degrada el modelo.
+#
+# La detección principal es data-driven (ver `deteccion`); esta lista solo
+# pone nombre a los periodos que el dato ya señala por su cuenta.
+
+episodios:
+  - id: covid_inicio
+    nombre: "Inicio de la pandemia y cuarentena"
+    desde: "2020-03-16"
+    hasta: "2020-05-31"
+    nota: >-
+      Compras de pánico, cierre de plazas y restricciones de movilidad.
+      Es el trimestre de mayor volatilidad del histórico (2020-Q1, 12,6%).
+
+  - id: paro_nacional_2021
+    nombre: "Paro nacional y bloqueos de vías"
+    desde: "2021-04-28"
+    hasta: "2021-06-30"
+    nota: >-
+      Bloqueos en corredores de abastecimiento. 6 de los 12 mayores saltos
+      semanales del histórico caen en la semana del 2021-05-03.
+
+  - id: invierno_2024
+    nombre: "Episodio de alta volatilidad 2024-Q3"
+    desde: "2024-08-15"
+    hasta: "2024-10-15"
+    nota: >-
+      Tercer trimestre más volátil del histórico (10,9%). Coincide con picos
+      fuertes en cebolla junca en varias plazas del Caribe.
+
+deteccion:
+  # Una semana es "de choque" si la mediana del |cambio %| entre todas las
+  # series supera este cuantil de la distribución histórica semanal.
+  cuantil_choque: 0.90
+  # Mínimo de series con dato para que la semana se pueda clasificar.
+  min_series: 5
