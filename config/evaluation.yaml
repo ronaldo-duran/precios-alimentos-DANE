@@ -1,0 +1,21 @@
+# Parámetros de la validación walk-forward (rolling-origin, ventana expansiva).
+# Split aleatorio PROHIBIDO: entrenaría con semanas posteriores a las predichas.
+
+walk_forward:
+  # Historia mínima antes del primer origen. 104 semanas = 2 años, suficiente
+  # para que el naive estacional (lag 52) tenga al menos un ciclo completo.
+  min_train: 104
+  # Horizontes evaluados: 1 a 4 semanas.
+  horizonte_max: 4
+  # Separación entre orígenes consecutivos. 4 semanas equivale a reevaluar
+  # una vez al mes: suficientes orígenes sin solapar demasiado los objetivos.
+  paso: 4
+  # Máximo de orígenes por serie (los más recientes). null = todos.
+  max_origenes: null
+
+# Semilla global. Los baselines son deterministas, pero las fases siguientes
+# (LightGBM, conformal) no lo son.
+semilla: 42
+
+# Solo se evalúan las series marcadas como aptas en reporte_series.csv.
+solo_series_aptas: true

@@ -115,6 +115,7 @@ regenera desde el servicio del DANE en poco más de un minuto.
 | `ingest` | SOAP del DANE | `data/raw/<operacion>_<fecha>.parquet`, `data/processed/diario.parquet`, `ingest_status.json` |
 | `validate` | `diario.parquet` | detiene el pipeline si el esquema o los valores no cuadran |
 | `clean` | `diario.parquet` | `data/processed/semanal.parquet`, `reporte_series.csv` |
+| `evaluate` | `semanal.parquet` | `backtest_baselines.parquet`, `metricas_por_horizonte.csv`, `metricas_por_serie.csv` |
 
 `ingest` es idempotente: si el origen no trae fechas posteriores a lo consolidado,
 no reescribe nada y lo deja anotado en `ingest_status.json` (`hay_datos_nuevos: false`),
@@ -149,6 +150,58 @@ Todas viven en `config/cleaning.yaml` y se pueden cambiar sin tocar código.
 
 ---
 
+## Resultados: los baselines
+
+Validación rolling-origin con ventana expansiva: 61 orígenes por serie, primer
+origen tras 104 semanas, un origen nuevo cada 4 semanas, horizontes 1 a 4.
+**36.495 pronósticos** sobre 30 series. Nunca hay split aleatorio.
+
+MASE por modelo y horizonte (menor es mejor; la escala es el naive de un paso
+dentro del train, así que el MASE crece con el horizonte por construcción):
+
+| Modelo | h=1 | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|---:|
+| **naive** | **1,179** | **1,656** | **2,081** | **2,348** |
+| naive con deriva | 1,182 | 1,663 | 2,097 | 2,371 |
+| promedio móvil 4 | 1,617 | 1,912 | 2,326 | 2,581 |
+| promedio móvil 8 | 2,169 | 2,395 | 2,766 | 2,999 |
+| naive estacional (52) | 5,359 | 5,193 | 5,195 | 5,277 |
+
+**Ningún baseline le gana al naive simple, en ningún horizonte.** Conviene
+decirlo sin adornos:
+
+- El **naive estacional es pésimo** (MASE ~5,2). Estos precios no tienen un
+  ciclo anual estable que se repita en la misma semana: el nivel se mueve por
+  oferta de corto plazo, y el periodo 2020-2026 incluye dos rupturas de régimen
+  (COVID y el paro de 2021) que rompen cualquier analogía con el año anterior.
+- Los **promedios móviles pierden** porque suavizan justo la información que
+  importa: el último precio. Cuanto más larga la ventana, peor (el de 8 semanas
+  es casi el doble de malo que el naive en h=1).
+- La **deriva no aporta nada**: empata con el naive y lo empeora un pelo. No hay
+  tendencia lineal explotable.
+
+Dificultad por producto, medida como sMAPE del naive:
+
+| Producto | sMAPE h=1 | sMAPE h=4 |
+|---|---:|---:|
+| Yuca | 5,1% | 9,3% |
+| Plátano hartón verde | 5,5% | 11,7% |
+| Papa negra | 7,9% | 15,0% |
+| Cebolla cabezona blanca | 10,0% | 23,9% |
+| Papa criolla | 11,5% | 19,3% |
+| Zanahoria | 11,7% | 20,6% |
+| Mango tommy | 11,8% | 32,6% |
+| **Tomate** | **17,2%** | **28,1%** |
+
+El tomate es el más difícil a una semana; el mango tommy es el que peor se
+degrada al alejarse el horizonte (32,6% a cuatro semanas), consistente con su
+estacionalidad de cosecha. Yuca y plátano son los más predecibles.
+
+Esta tabla es la vara contra la que se medirán ETS, ARIMA y LightGBM. Si no
+bajan de MASE 1,179 en h=1, el proyecto lo dirá.
+
+---
+
 ## Estado
 
 **Fase 1 (datos y limpieza): completa.** 37 tests en verde.
@@ -158,5 +211,8 @@ Panel actual: **31 series** (8 productos × 4 plazas − 1 excluida), **348 sema
 **30 de 31 series son aptas** para modelar; `mango_tommy @ cucuta_cenabastos`
 queda fuera por 16,8% de faltantes.
 
-Pendiente: baselines y validación walk-forward, modelos e intervalos, registro,
-app, CI y variables exógenas.
+**Fase 2 (baselines y validación walk-forward): completa.** 74 tests en verde,
+incluidos los de ausencia de leakage y construcción de folds.
+
+Pendiente: modelos estadísticos y de gradient boosting con intervalos, registro
+de modelos y pronósticos, app, CI y variables exógenas.

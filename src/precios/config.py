@@ -109,6 +109,22 @@ class ReglasLimpieza:
         return int(self.series["min_semanas"])
 
 
+@dataclass(frozen=True)
+class ConfigEvaluacion:
+    """Parámetros de la validación walk-forward."""
+
+    min_train: int
+    horizonte_max: int
+    paso: int
+    max_origenes: int | None
+    semilla: int
+    solo_series_aptas: bool
+
+    @property
+    def horizontes(self) -> tuple[int, ...]:
+        return tuple(range(1, self.horizonte_max + 1))
+
+
 def _read_yaml(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
@@ -157,6 +173,29 @@ def load_normalizacion(path: Path | None = None) -> Normalizacion:
         plazas=dict(raw.get("plazas") or {}),
         productos=dict(raw.get("productos") or {}),
     )
+
+
+@lru_cache(maxsize=1)
+def load_evaluacion(path: Path | None = None) -> ConfigEvaluacion:
+    """Lee `config/evaluation.yaml`."""
+    raw = _read_yaml(path or CONFIG_DIR / "evaluation.yaml")
+    wf = raw.get("walk_forward", {})
+    cfg = ConfigEvaluacion(
+        min_train=int(wf.get("min_train", 104)),
+        horizonte_max=int(wf.get("horizonte_max", 4)),
+        paso=int(wf.get("paso", 4)),
+        max_origenes=wf.get("max_origenes"),
+        semilla=int(raw.get("semilla", 42)),
+        solo_series_aptas=bool(raw.get("solo_series_aptas", True)),
+    )
+    log.info(
+        "Walk-forward: min_train=%d, horizontes 1-%d, paso=%d, semilla=%d",
+        cfg.min_train,
+        cfg.horizonte_max,
+        cfg.paso,
+        cfg.semilla,
+    )
+    return cfg
 
 
 @lru_cache(maxsize=1)
