@@ -485,6 +485,12 @@ son 2 MB estáticos, el log en vivo crece ~35 KB por semana.
 Estado actual: **240 pronósticos en vivo, todos pendientes.** El primero se
 resuelve el 2026-09-28. Es lo honesto que se puede decir hoy.
 
+> El log se inicializó limpio en el momento de la primera publicación del
+> repositorio. Durante el desarrollo acumuló pronósticos de tres versiones del
+> mismo día —iteración, no historia— y se reinició antes de publicar. La
+> garantía de append-only rige desde aquí: **ninguna fila publicada se
+> reescribirá jamás.**
+
 ---
 
 ## Alertas de alza

@@ -1,6 +1,6 @@
 {
-  "version": "2026-09-29_d8ab6229",
-  "entrenado_en": "2026-09-29T21:37:22",
+  "version": "2026-09-29_20fb0a11",
+  "entrenado_en": "2026-09-29T23:11:17",
   "semana_inicio": "2020-01-27",
   "semana_fin": "2026-09-21",
   "n_series": 30,
@@ -35,7 +35,7 @@
     "min_child_samples": 60,
     "reg_lambda": 1
   },
-  "commit": "bb28cb6",
+  "commit": "3b4080f",
   "radios_conformales": {
     "1": 0.15313853384507434,
     "2": 0.20967112551024658,
