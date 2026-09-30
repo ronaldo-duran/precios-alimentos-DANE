@@ -631,6 +631,21 @@ Decisiones del workflow que conviene conocer:
 - **Una corrida a la vez** (`concurrency`), porque dos escribiendo en un log
   append-only chocarían al hacer push.
 
+### Antes de que corra el primer cron
+
+El pipeline semanal commitea a `main`, y para eso el `GITHUB_TOKEN` necesita
+permiso de escritura. Este repositorio viene con los permisos de Actions en
+**solo lectura**, así que hay que habilitarlo una vez:
+
+> **Settings → Actions → General → Workflow permissions → "Read and write permissions"**
+
+Sin ese cambio el workflow corre entero y falla en el último paso, al hacer
+push, con un 403. El propio workflow lo detecta y lo dice con ese texto, para
+no tener que adivinarlo un lunes por la mañana.
+
+El workflow de CI declara `permissions: contents: read` explícitamente, así que
+ese cambio no le da escritura a los tests.
+
 ### Una sutileza del registro de modelos
 
 El hash de la versión incluye el commit, así que **cualquier cambio de código

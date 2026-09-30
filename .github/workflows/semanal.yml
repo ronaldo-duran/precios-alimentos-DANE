@@ -138,7 +138,11 @@ jobs:
           # Si alguien empujó a main mientras corría el pipeline, se rebasa en
           # vez de fallar: el log es append-only, así que rebasar es seguro.
           git pull --rebase origin main
-          git push origin HEAD:main
+
+          if ! git push origin HEAD:main; then
+            echo "::error::No se pudo empujar a main. Si el error es 403, el repositorio tiene los permisos de Actions en solo lectura: Settings -> Actions -> General -> Workflow permissions -> 'Read and write permissions'."
+            exit 1
+          fi
 
       - name: Guardar diagnósticos si algo falla
         if: ${{ failure() }}
