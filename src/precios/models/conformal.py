@@ -57,6 +57,7 @@ class ConformalGlobal:
         )
         self._radio: dict[int, float] = {}
         self._n_calibracion: dict[int, int] = {}
+        self._residuos_con_signo: dict[int, np.ndarray] = {}
 
     def fit(self, features: pd.DataFrame, origen: int) -> ConformalGlobal:
         """Ajusta el modelo en el tramo propio y calibra en el posterior.
@@ -75,19 +76,31 @@ class ConformalGlobal:
         self._interno.fit(features, origen_propio)
         self._radio.clear()
         self._n_calibracion.clear()
+        self._residuos_con_signo.clear()
 
         for h in self.horizontes:
             residuos = self._residuos_calibracion(features, origen, origen_propio, h)
             if residuos.size == 0:
                 continue
-            self._radio[h] = _cuantil_conformal(residuos, self.nivel)
+            self._residuos_con_signo[h] = residuos
+            self._radio[h] = _cuantil_conformal(np.abs(residuos), self.nivel)
             self._n_calibracion[h] = int(residuos.size)
         return self
+
+    def residuos_con_signo(self, h: int) -> np.ndarray:
+        """Residuos de calibración con signo para el horizonte `h`.
+
+        Los intervalos solo necesitan su valor absoluto, pero una pregunta
+        direccional —¿cuál es la probabilidad de que el precio *suba* más de
+        un umbral?— necesita el signo. Es la distribución predictiva empírica
+        alrededor del pronóstico puntual, y viene ya calibrada fuera de muestra.
+        """
+        return self._residuos_con_signo.get(h, np.array([]))
 
     def _residuos_calibracion(
         self, features: pd.DataFrame, origen: int, origen_propio: int, h: int
     ) -> np.ndarray:
-        """Residuos absolutos en log-cambio del tramo que el modelo no vio.
+        """Residuos en log-cambio (con signo) del tramo que el modelo no vio.
 
         Son las filas posteriores al entrenamiento propio cuyo objetivo aún
         ocurrió antes del origen real.
@@ -104,7 +117,8 @@ class ConformalGlobal:
         if modelo is None:
             return np.array([])
         pred_log = modelo.predict(filas[self._interno._features])
-        return np.abs(objetivo[valido].to_numpy(dtype=float) - pred_log)
+        # Se devuelven CON signo; quien necesite el valor absoluto lo toma.
+        return objetivo[valido].to_numpy(dtype=float) - pred_log
 
     def predict(self, predecir: pd.DataFrame) -> pd.DataFrame:
         """Pronóstico puntual con intervalo conformal simétrico en log."""

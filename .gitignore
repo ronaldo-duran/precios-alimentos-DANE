@@ -1,14 +1,26 @@
-# Datos: no se versionan (ver README para regenerarlos con `make ingest`)
+# Datos crudos y derivados: no se versionan (ver README para regenerarlos).
 data/raw/*
-data/processed/*
 data/incoming/*
+data/processed/*
 !data/raw/.gitkeep
-!data/processed/.gitkeep
 !data/incoming/.gitkeep
+!data/processed/.gitkeep
 
-# Modelos entrenados (artefactos pesados); sí se versionan metadata.json y el log
+# EXCEPCIÓN: los logs del registro en vivo SÍ se versionan. Son la prueba de
+# que un pronóstico se escribió antes de que ocurriera la semana, y el workflow
+# semanal los commitea. El log en vivo crece ~35 KB/semana; el sembrado del
+# backtest es estático y se commitea una sola vez.
+!data/processed/forecasts_log.csv
+!data/processed/alertas_log.csv
+!data/processed/forecasts_backfill.csv
+
+# Modelos: los pesos son binarios pesados y se pueden regenerar con `make train`.
+# La metadata y los diagnósticos sí se versionan: son la trazabilidad.
 models/*
 !models/.gitkeep
+!models/latest.json
+!models/*/
+models/*/*.joblib
 
 # Python
 __pycache__/

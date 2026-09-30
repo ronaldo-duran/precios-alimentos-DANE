@@ -1,0 +1,35 @@
+# Alertas de alza de precio en las próximas 2 semanas.
+#
+# UMBRAL POR PRODUCTO, no plano. Un umbral fijo del 10% no significa lo mismo
+# en yuca que en tomate: con 10% plano la alerta se dispararía el 13,7% de las
+# semanas en yuca y el 36,6% en tomate, y una alerta que suena un tercio del
+# tiempo no informa de nada.
+#
+# Cada umbral es el percentil 75 de las ALZAS a 2 semanas observadas en esa
+# serie (2020-2026), redondeado al 5% más cercano con un piso del 10%. Así la
+# tasa base queda entre el 10% y el 17% en todos los productos y las alertas
+# son comparables entre ellos.
+#
+# Regenerar con:  python -m precios.models.alertas --derivar-umbrales
+
+horizonte_semanas: 2
+
+umbral_por_defecto: 0.15
+
+umbrales:
+  yuca: 0.10                     # q75 de alzas 11,1% -> dispara el 13,7% de las semanas
+  platano_harton_verde: 0.15     # q75 13,5% -> 10,3%
+  papa_negra: 0.15               # q75 17,5% -> 16,6%
+  papa_criolla: 0.25             # q75 23,8% -> 12,5%
+  zanahoria: 0.25                # q75 26,1% -> 13,2%
+  cebolla_cabezona_blanca: 0.30  # q75 28,7% -> 11,8%
+  mango_tommy: 0.35              # q75 34,3% -> 12,6%
+  tomate: 0.40                   # q75 39,6% -> 12,4%
+
+# Probabilidad a partir de la cual la alerta se considera "activa" en la app.
+probabilidad_minima: 0.30
+
+derivacion:
+  cuantil: 0.75
+  redondeo: 0.05
+  piso: 0.10

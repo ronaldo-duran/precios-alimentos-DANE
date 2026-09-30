@@ -118,10 +118,18 @@ regenera desde el servicio del DANE en poco más de un minuto.
 | `clean` | `diario.parquet` | `data/processed/semanal.parquet`, `reporte_series.csv` |
 | `tune` | `semanal.parquet` | `config/lgbm_params.yaml`, `busqueda_hiperparametros.csv` |
 | `evaluate` | `semanal.parquet` | `backtest.parquet`, `metricas_por_horizonte.csv`, `metricas_por_serie.csv`, `cobertura_intervalos.csv`, `degradacion_por_regimen.csv`, `semanas_choque.csv`, `importancia_features.csv` |
+| `train` | `semanal.parquet` | `models/<fecha>_<hash>/` + `models/latest.json` |
+| `forecast` | `models/latest.json` | `forecasts_log.csv`, `alertas_log.csv` (append-only) |
+| `reconcile` | los logs + `semanal.parquet` | `reconciliacion.csv`, `desempeno_en_vivo.csv`, `alertas_reconciliadas.csv`, `desempeno_alertas.csv` |
 
 `ingest` es idempotente: si el origen no trae fechas posteriores a lo consolidado,
 no reescribe nada y lo deja anotado en `ingest_status.json` (`hay_datos_nuevos: false`),
 para que el reentrenamiento pueda saltarse.
+
+`make pipeline` ejecuta el **ciclo semanal**: `ingest → clean → train → forecast
+→ reconcile`. No incluye `evaluate`, que son ~30 minutos de backtest y cuyas
+métricas no cambian de forma útil semana a semana; se corre a mano cuando se
+toca el modelado.
 
 ### Esquema de `semanal.parquet`
 
@@ -417,6 +425,115 @@ consultarlos.** La app lo dice donde se ve.
 
 ---
 
+## Registro de modelos y de pronósticos en vivo
+
+### Registro de modelos
+
+Cada `make train` produce `models/<fecha>_<hash>/` con el modelo, un
+`metadata.json` y los diagnósticos. El hash resume **datos + hiperparámetros +
+semilla + commit**, así que reentrenar con las mismas entradas cae en el mismo
+directorio en vez de llenar el registro de copias. `models/latest.json` apunta
+a la versión vigente (un archivo, no un symlink: en Windows los enlaces
+simbólicos necesitan permisos especiales y romperían el pipeline en silencio).
+
+La `metadata.json` responde la única pregunta que importa meses después, cuando
+un pronóstico sale raro: *¿con qué datos, qué código y qué semilla se produjo
+esto?* Incluye rango de datos, series, productos, plazas, horizontes, nivel de
+intervalo, semilla, hiperparámetros, commit, radios conformales y las métricas
+del último backtest.
+
+Se versiona la metadata pero **no** los pesos (`.joblib`, 1,8 MB): se regeneran
+con `make train`.
+
+### Se registra el modelo conformal, no el cuantílico
+
+Es una decisión deliberada con un coste explícito. `lgbm_conformal` tiene peor
+pronóstico puntual que `lgbm_cuantil` (MASE 1,227 frente a 1,154 en h=1), porque
+reserva 26 semanas para calibrar y entrena con menos datos. Pero sus intervalos
+son los únicos que cubren lo que prometen (79–81% frente a 65–74%). Para algo
+que publica bandas de incertidumbre, **un intervalo honesto vale más que un 6%
+de MASE**.
+
+### El log en vivo
+
+`forecasts_log.csv` es **append-only**. Se escribe *antes* de que exista el dato
+real y nunca se reescribe una fila pasada. Si se vuelve a correr con el mismo
+origen y modelo no se añade nada; si cambia el modelo o avanza el origen, se
+añade una fila nueva y la anterior queda intacta. Si el esquema del archivo
+cambia, el pipeline **falla con instrucciones** en vez de migrar en silencio.
+
+Se registra también el pronóstico del **naive** para los mismos puntos: sin la
+referencia, el error acumulado no dice nada.
+
+Esta es la parte del proyecto que no se puede falsear. Un backtest se puede
+repetir hasta que salga bien; un pronóstico escrito antes de los hechos, no.
+
+### `vivo` frente a `backfill`
+
+El log en vivo empieza vacío por definición: su primera fila no se resuelve
+hasta que pasa la semana. Para que la app tenga algo que mostrar desde el día
+uno, se siembran los 14.598 pronósticos del walk-forward en
+`forecasts_backfill.csv`, marcados `procedencia="backfill"`.
+
+Son igual de out-of-sample —ningún modelo vio datos posteriores a su origen—
+pero **no se escribieron antes de los hechos**, así que tienen valor descriptivo
+y no probatorio. Las tablas de desempeño los reportan **siempre por separado** y
+nunca los mezclan. Viven en archivos distintos por higiene de git: el sembrado
+son 2 MB estáticos, el log en vivo crece ~35 KB por semana.
+
+Estado actual: **240 pronósticos en vivo, todos pendientes.** El primero se
+resuelve el 2026-09-28. Es lo honesto que se puede decir hoy.
+
+---
+
+## Alertas de alza
+
+`config/alertas.yaml`. Probabilidad de que el precio suba más de un umbral en
+las próximas 2 semanas.
+
+### El umbral es por producto, y esa es toda la cuestión
+
+Con un umbral plano del 10%, la alerta se dispararía el **13,7% de las semanas
+en yuca y el 36,6% en tomate**. La misma etiqueta significando cosas distintas,
+y una alerta que suena un tercio del tiempo no informa de nada.
+
+Cada umbral es el percentil 75 de las alzas históricas a 2 semanas de ese
+producto, redondeado al 5% con piso del 10%:
+
+| Producto | Umbral | Tasa base |
+|---|---:|---:|
+| Yuca | 10% | 13,7% |
+| Plátano hartón verde | 15% | 10,3% |
+| Papa negra | 15% | 16,6% |
+| Papa criolla | 25% | 12,5% |
+| Zanahoria | 25% | 13,2% |
+| Cebolla cabezona blanca | 30% | 11,8% |
+| Mango tommy | 35% | 12,6% |
+| Tomate | 40% | 12,4% |
+
+La tasa base queda entre el 10% y el 17% en todos los productos, frente al
+rango 14–38% del umbral plano. Ahora "alerta activa" significa lo mismo en
+todas partes.
+
+### De dónde sale la probabilidad
+
+De los **residuos de calibración conformal con signo**: la distribución
+predictiva empírica alrededor del pronóstico, ya validada fuera de muestra. No
+se asume normalidad.
+
+Los dos horizontes se acoplan de forma **comonotónica** (se evalúan en el mismo
+nivel de cuantil). Suponer independencia inflaría la probabilidad —los errores
+de h=1 y h=2 están muy correlacionados: si el precio se dispara, se dispara
+para ambos— y tomar solo el máximo por horizonte ignoraría que dos
+oportunidades son más que una.
+
+**Advertencia que hereda de los intervalos:** estas probabilidades se apoyan en
+la calibración conformal, cuya cobertura se desploma en semanas de choque. La
+alerta es informativa en régimen normal y **no es de fiar durante un choque**.
+
+
+---
+
 ## Estado
 
 **Fase 1 (datos y limpieza): completa.** 37 tests en verde.
@@ -435,5 +552,8 @@ Conclusión corta: a una semana el naive es imbatible; a 2–4 semanas hay un
 3–7% de margen; los intervalos conformales están bien calibrados en promedio y
 fallan en los choques.
 
-Pendiente: registro de modelos y de pronósticos en vivo, app, CI y variables
-exógenas.
+**Fase 4 (registro de modelos, log en vivo y alertas): completa.** 166 tests
+en verde. Modelo registrado con trazabilidad completa, log de pronósticos
+append-only y alertas con umbral por producto.
+
+Pendiente: app de Streamlit, CI y variables exógenas.
