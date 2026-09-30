@@ -534,6 +534,57 @@ alerta es informativa en régimen normal y **no es de fiar durante un choque**.
 
 ---
 
+## La app
+
+```bash
+make app     # o: .venv/Scripts/python -m streamlit run app/Inicio.py
+```
+
+Cuatro páginas:
+
+1. **Pronóstico** — selector de producto y plaza, histórico reciente, pronóstico
+   a 1–4 semanas con su banda, y el **naive dibujado encima**. Si ambas líneas
+   casi coinciden, el modelo está diciendo que no sabe más que el método trivial,
+   y eso tiene que verse.
+2. **Desempeño** — MASE frente al naive por modelo y por producto, cobertura de
+   los intervalos, y el registro en vivo.
+3. **Choques y límites** — dónde se rompe, por qué, y cómo está construido.
+4. **Alertas** — probabilidad de alza por serie, con el umbral de cada producto.
+
+El aviso de "precios mayoristas, no al consumidor" y la fecha del último dato
+aparecen en **todas** las páginas, no solo en la portada.
+
+### La app no entrena ni descarga nada
+
+Solo lee artefactos ya calculados por el pipeline. Eso la hace instantánea,
+desplegable en Streamlit Community Cloud sin secretos, e imposible de
+desincronizar del backtest. Las rutas se derivan de `__file__`, nunca absolutas.
+
+Por eso `data/processed/` tiene dos excepciones en `.gitignore`: los logs del
+registro en vivo y los derivados que consume la app (~470 KB de CSV y un parquet
+pequeño). Los pesados —`diario.parquet`, `backtest.parquet`,
+`reconciliacion.csv`— siguen fuera y se regeneran con `make pipeline`.
+
+### Decisiones de visualización
+
+- **Paleta validada**, no elegida a ojo: azul `#2a78d6` y naranja `#eb6834`,
+  con ΔE de 24,7 bajo simulación de daltonismo (el objetivo es ≥8) y 33,6 en
+  visión normal (el piso es 15).
+- **Mapa de calor divergente** para la comparación contra el naive, en vez de
+  barras agrupadas: 20 celdas con su número dentro, color azul/rojo alrededor
+  de cero y gris neutro al centro. Con barras hacían falta cuatro series sin
+  leyenda posible, porque el color ya estaba gastado en el signo.
+- Los tonos del mapa se **mezclan con la superficie** para que el valor escrito
+  dentro de cada celda mantenga ≥7:1 de contraste. Un ramp a plena saturación
+  deja el texto ilegible justo en las celdas extremas, que son las que más se
+  miran.
+- **El naive estacional y los promedios móviles quedan fuera de las gráficas**
+  de comparación: pierden por 35–350% y comprimirían a cero el rango donde está
+  la historia (±8%). Sus números están en la tabla y en el pie.
+
+
+---
+
 ## Estado
 
 **Fase 1 (datos y limpieza): completa.** 37 tests en verde.
@@ -556,4 +607,7 @@ fallan en los choques.
 en verde. Modelo registrado con trazabilidad completa, log de pronósticos
 append-only y alertas con umbral por producto.
 
-Pendiente: app de Streamlit, CI y variables exógenas.
+**Fase 5 (app de Streamlit): completa.** 176 tests en verde. Cuatro páginas,
+desplegable en Streamlit Community Cloud leyendo del repo.
+
+Pendiente: CI con GitHub Actions y variables exógenas.

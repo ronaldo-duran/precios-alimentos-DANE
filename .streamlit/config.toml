@@ -1,0 +1,16 @@
+# Tema alineado con la paleta de las gráficas: las superficies y tintas son las
+# mismas que usan las figuras de Plotly, para que no haya dos grises distintos.
+
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

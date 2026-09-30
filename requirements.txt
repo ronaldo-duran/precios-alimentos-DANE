@@ -1,0 +1,9 @@
+# Dependencias para Streamlit Community Cloud.
+# La app solo LEE artefactos ya versionados en data/processed/: no entrena,
+# no descarga nada del DANE y no necesita secretos. Por eso no hacen falta
+# lightgbm ni statsforecast aquí.
+streamlit>=1.36
+plotly>=5.22
+pandas>=2.2,<3
+numpy>=1.26,<3
+pyarrow>=16

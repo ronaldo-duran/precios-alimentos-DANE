@@ -14,6 +14,23 @@ data/processed/*
 !data/processed/alertas_log.csv
 !data/processed/forecasts_backfill.csv
 
+# EXCEPCIÓN 2: los derivados que consume la app. Streamlit Community Cloud
+# despliega leyendo del repo, así que sin estos la app no arranca. Son
+# procesados y pequeños (~470 KB en total), no datos crudos: `diario.parquet`
+# (3,5 MB), `backtest.parquet` y `reconciliacion.csv` siguen fuera.
+!data/processed/semanal.parquet
+!data/processed/reporte_series.csv
+!data/processed/metricas_por_horizonte.csv
+!data/processed/metricas_por_serie.csv
+!data/processed/cobertura_intervalos.csv
+!data/processed/degradacion_por_regimen.csv
+!data/processed/semanas_choque.csv
+!data/processed/importancia_features.csv
+!data/processed/desempeno_en_vivo.csv
+!data/processed/desempeno_alertas.csv
+!data/processed/alertas_reconciliadas.csv
+!data/processed/busqueda_hiperparametros.csv
+
 # Modelos: los pesos son binarios pesados y se pueden regenerar con `make train`.
 # La metadata y los diagnósticos sí se versionan: son la trazabilidad.
 models/*
@@ -30,3 +47,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+
+# Artefactos locales del entorno de desarrollo
+.claude/launch.json

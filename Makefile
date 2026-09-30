@@ -61,7 +61,7 @@ test:
 	$(PY) -m pytest
 
 lint:
-	$(PY) -m ruff check src tests
+	$(PY) -m ruff check src tests app
 
 app:
 	$(PY) -m streamlit run app/Inicio.py
