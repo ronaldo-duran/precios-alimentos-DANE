@@ -23,6 +23,7 @@ from precios.cleaning.normalize import (
     filtrar_alcance,
     normalizar_nombres,
 )
+from precios.cleaning.unidades import detectar_cambio_unidad, marcar_cambio_unidad
 from precios.config import PROCESSED_DIR, load_normalizacion, load_reglas, load_scope
 from precios.data.validation import reporte_series, validar_diario, validar_semanal
 from precios.logging_setup import setup_logging
@@ -31,6 +32,7 @@ from precios.pipeline.ingest import DIARIO_PATH
 log = logging.getLogger(__name__)
 
 SEMANAL_PATH = PROCESSED_DIR / "semanal.parquet"
+UNIDADES_PATH = PROCESSED_DIR / "sospechas_unidad.csv"
 REPORTE_PATH = PROCESSED_DIR / "reporte_series.csv"
 
 
@@ -69,6 +71,13 @@ def clean(
 
     semanal = agregar_semanal(df, reglas)
     semanal = reindexar_semanas(semanal)
+
+    # Un cambio de unidad no se parece a un error: es un escalón limpio que el
+    # detector de outliers deja pasar. Se marca y se avisa, nunca se corrige.
+    sospechas = detectar_cambio_unidad(semanal)
+    semanal = marcar_cambio_unidad(semanal, sospechas)
+    sospechas.to_csv(UNIDADES_PATH, index=False, encoding="utf-8")
+
     validar_semanal(semanal.dropna(subset=["precio_kg"]), reglas)
 
     rep = reporte_series(semanal.dropna(subset=["precio_kg"]), reglas)

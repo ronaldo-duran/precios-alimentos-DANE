@@ -152,6 +152,7 @@ def load_scope(path: Path | None = None) -> Scope:
 
 def _validar_scope(scope: Scope) -> None:
     """Falla temprano ante un `products.yaml` incoherente."""
+    _validar_ciudades(scope)
     ids_prod = [p.id for p in scope.productos]
     ids_plaza = [p.id for p in scope.plazas]
     for nombre, ids in (("producto", ids_prod), ("plaza", ids_plaza)):
@@ -163,6 +164,34 @@ def _validar_scope(scope: Scope) -> None:
             raise ValueError(f"Exclusión con producto desconocido: {exc.producto!r}")
         if exc.plaza not in ids_plaza:
             raise ValueError(f"Exclusión con plaza desconocida: {exc.plaza!r}")
+
+
+def _validar_ciudades(scope: Scope) -> None:
+    """Comprueba que las ciudades del alcance se escriben de forma canónica.
+
+    Solo avisa si la ciudad **no se puede resolver**. No importa cómo esté
+    escrita —`Bogotá`, `BOGOTA DC` y `Distrito Capital` son equivalentes para
+    la canonización, que es justamente su razón de ser—; lo que importa es que
+    exista en el diccionario, porque una ciudad desconocida produciría un cruce
+    vacío y silencioso al mezclarla con otra fuente.
+
+    Avisa, no detiene: una ciudad nueva y legítima no debe bloquear el pipeline.
+    """
+    from precios.cleaning.nombres import cargar_canonizadores
+
+    canonizadores = cargar_canonizadores()
+    ciudades = canonizadores.get("ciudades")
+    if ciudades is None:
+        return
+
+    for plaza in scope.plazas:
+        if ciudades.resolver(plaza.ciudad) is None:
+            log.warning(
+                "La ciudad %r de la plaza %r no está en config/nombres.yaml; "
+                "añádela para poder cruzarla con otras fuentes.",
+                plaza.ciudad,
+                plaza.id,
+            )
 
 
 @lru_cache(maxsize=1)

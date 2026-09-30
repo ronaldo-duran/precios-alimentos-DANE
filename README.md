@@ -158,6 +158,46 @@ Todas viven en `config/cleaning.yaml` y se pueden cambiar sin tocar código.
 - **Detección de outliers con MAD sobre log-retornos**, más un piso de relevancia
   del 15%. Sin ese piso, una serie casi plana tiene MAD ≈ 0 y el z-score marca
   variaciones del 1% como anomalías.
+- **Detección de cambios de unidad**, que es un fallo distinto y peor (ver abajo).
+
+### El cambio de unidad: el fallo que no se parece a un error
+
+Si el DANE pasara de cotizar en COP/kg a COP/500 g, todos los precios se
+partirían a la mitad y el pipeline lo leería como una caída real: entrenaría
+con ella, la pronosticaría y la publicaría.
+
+**El detector de outliers no lo cubre.** Ese busca *picos* —un salto seguido de
+una vuelta a la normalidad—; un cambio de unidad es un *escalón* que salta una
+vez y se queda. Después del escalón los retornos vuelven a ser normales y el
+z-score robusto no ve nada.
+
+Llegar al criterio correcto costó tres intentos, y vale la pena contarlo:
+
+1. **Mirando serie por serie** un salto por factor redondo que persistiera, con
+   dos series coincidiendo: **más de cien falsos positivos** sobre los datos
+   reales. Con productos de CV 40-57%, que el tomate duplique su precio en ocho
+   semanas es un martes cualquiera.
+2. **Apretando la tolerancia al 3%** por serie: cero falsos positivos, pero
+   también **dejó de detectar un cambio de unidad inyectado a propósito**. Cada
+   serie tiene su propia deriva y ninguna aterriza exactamente en ×0,5.
+3. El error de fondo era mirar las series de una en una. Un cambio de unidad no
+   mueve series: mueve **el panel entero por el mismo factor**.
+
+El criterio final mide el **ratio transversal**: la mediana, entre todas las
+series, del cambio de nivel de esa semana. Calibrado sobre los datos reales
+(333 semanas, 30 series), ese ratio se mueve entre **0,707 y 1,427** y nunca se
+acerca a 0,5 ni a 2,0. Con un cambio de unidad inyectado cae a **0,47**. La
+separación es limpia.
+
+Validado en cinco escenarios: datos reales (no dispara), panel a la mitad
+(dispara), panel ×1000 (dispara), kg→libras (dispara) y un solo producto a la
+mitad (no dispara, porque eso es mercado y no unidad).
+
+El factor que reporta es **orientativo, no un diagnóstico**: con la tolerancia
+que el método necesita, kg→libras puede quedar atribuido a ×0,5. La señal útil
+es *"el panel entero cambió de escala, ve a mirar la fuente"*. Se marca con
+`flag_cambio_unidad` y **nunca se corrige**: convertir por un factor adivinado
+sería mucho peor que reportarlo.
 
 ---
 
