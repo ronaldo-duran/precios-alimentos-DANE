@@ -21,14 +21,13 @@ Reglas del log:
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from precios.config import PROCESSED_DIR, load_evaluacion
+from precios.config import PROCESSED_DIR, hoy, load_evaluacion
 from precios.features.build import anadir_objetivos, construir_features, filas_a_predecir
 from precios.logging_setup import setup_logging
 from precios.models import registry
@@ -131,7 +130,7 @@ def _anadir_contexto(
     """Completa el pronóstico con las columnas del log."""
     precios = base.set_index(["producto_id", "plaza_id"])["y"]
     pred = pred.copy()
-    pred["fecha_pronostico"] = dt.date.today().isoformat()
+    pred["fecha_pronostico"] = hoy().isoformat()
     pred["version_modelo"] = metadata.version
     pred["modelo"] = "lgbm_conformal"
     pred["semana_origen"] = semana_origen
@@ -154,7 +153,7 @@ def _pronostico_naive(
         for h in horizontes:
             filas.append(
                 {
-                    "fecha_pronostico": dt.date.today().isoformat(),
+                    "fecha_pronostico": hoy().isoformat(),
                     "version_modelo": metadata.version,
                     "modelo": "naive",
                     "producto_id": fila["producto_id"],
@@ -224,7 +223,7 @@ def _registrar_alertas(
     alertas = generar_alertas(con_base, modelo, cfg)
     if alertas.empty:
         return
-    alertas["fecha_pronostico"] = dt.date.today().isoformat()
+    alertas["fecha_pronostico"] = hoy().isoformat()
     alertas["version_modelo"] = metadata.version
     alertas["semana_origen"] = semana_origen
     alertas["semana_limite"] = semana_origen + pd.Timedelta(

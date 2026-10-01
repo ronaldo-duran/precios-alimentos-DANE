@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from precios.config import INCOMING_DIR, RAW_DIR
+from precios.config import INCOMING_DIR, RAW_DIR, hoy
 
 log = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class SipsaSoapSource(DataSource):
 
     def snapshot_path(self, fecha: dt.date | None = None) -> Path:
         """Ruta del snapshot parquet para una fecha de ingesta."""
-        fecha = fecha or dt.date.today()
+        fecha = fecha or hoy()
         return self.raw_dir / f"{self.operacion}_{fecha.isoformat()}.parquet"
 
     def fetch(self, *, force: bool = False) -> pd.DataFrame:

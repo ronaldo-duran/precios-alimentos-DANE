@@ -149,3 +149,27 @@ def test_listar_sin_modelos_devuelve_tabla_vacia_con_columnas(tmp_path):
     tabla = registry.listar(models_dir=tmp_path)
     assert tabla.empty
     assert "version" in tabla.columns
+
+
+def test_los_artefactos_se_fechan_en_hora_de_colombia():
+    """El runner de CI corre en UTC: un pipeline lanzado un lunes por la tarde
+    en Bogotá produciría artefactos fechados el martes."""
+    import datetime as dt
+
+    from precios.config import ZONA, ahora, hoy
+
+    assert ZONA.utcoffset(None) == dt.timedelta(hours=-5)
+    assert hoy() == dt.datetime.now(ZONA).date()
+    assert ahora().tzinfo is not None
+    assert ahora().microsecond == 0
+
+
+def test_la_fecha_de_colombia_puede_diferir_de_utc():
+    """Entre las 19:00 y la medianoche de Bogotá, UTC ya es el día siguiente."""
+    import datetime as dt
+
+    from precios.config import ZONA
+
+    noche = dt.datetime(2026, 9, 30, 20, 0, tzinfo=ZONA)
+    assert noche.date() == dt.date(2026, 9, 30)
+    assert noche.astimezone(dt.UTC).date() == dt.date(2026, 10, 1)

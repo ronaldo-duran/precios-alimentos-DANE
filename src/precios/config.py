@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -19,6 +20,21 @@ RAW_DIR = DATA_DIR / "raw"
 INCOMING_DIR = DATA_DIR / "incoming"
 PROCESSED_DIR = DATA_DIR / "processed"
 MODELS_DIR = PROJECT_ROOT / "models"
+
+#: Zona horaria del proyecto. Los artefactos se fechan en hora de Colombia, no
+#: en UTC: el runner de GitHub Actions corre en UTC y un pipeline lanzado un
+#: lunes por la tarde en Bogotá produciría artefactos fechados el martes.
+ZONA = dt.timezone(dt.timedelta(hours=-5), "America/Bogota")
+
+
+def hoy() -> dt.date:
+    """Fecha de hoy en Colombia."""
+    return dt.datetime.now(ZONA).date()
+
+
+def ahora() -> dt.datetime:
+    """Marca de tiempo actual en Colombia, sin microsegundos."""
+    return dt.datetime.now(ZONA).replace(microsecond=0)
 
 
 @dataclass(frozen=True)

@@ -12,13 +12,12 @@ esté contaminada por la propia selección.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import logging
 
 import pandas as pd
 import yaml
 
-from precios.config import CONFIG_DIR, PROCESSED_DIR, load_evaluacion
+from precios.config import CONFIG_DIR, PROCESSED_DIR, hoy, load_evaluacion
 from precios.evaluation.splits import rolling_origins
 from precios.features.build import anadir_objetivos, construir_features
 from precios.logging_setup import setup_logging
@@ -77,7 +76,7 @@ def _escribir_params(mejor: dict, tabla: pd.DataFrame, busqueda, evaluacion, sem
     contenido = {
         "_procedencia": {
             "generado_por": "make tune (precios.pipeline.tune)",
-            "fecha": dt.date.today().isoformat(),
+            "fecha": hoy().isoformat(),
             "semilla": semilla,
             "configuraciones_probadas": int(len(tabla)),
             "origenes_busqueda": f"{busqueda[0].origen}-{busqueda[-1].origen}",

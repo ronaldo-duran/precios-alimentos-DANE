@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from precios.config import RAW_DIR
+from precios.config import RAW_DIR, hoy
 
 log = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def descargar_oni(*, raw_dir: Path = RAW_DIR, force: bool = False) -> pd.DataFra
     `SEAS YR TOTAL ANOM`; `ANOM` es el ONI.
     """
     raw_dir.mkdir(parents=True, exist_ok=True)
-    destino = raw_dir / f"oni_{dt.date.today().isoformat()}.csv"
+    destino = raw_dir / f"oni_{hoy().isoformat()}.csv"
     if destino.exists() and not force:
         log.info("Reutilizando ONI cacheado: %s", destino.name)
         return pd.read_csv(destino, parse_dates=["mes"])

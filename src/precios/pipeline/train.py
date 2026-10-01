@@ -17,14 +17,13 @@ producto que publica bandas de incertidumbre, esa es la elección correcta.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import logging
 from pathlib import Path
 
 import pandas as pd
 
-from precios.config import PROCESSED_DIR, load_evaluacion, load_lgbm_params
+from precios.config import PROCESSED_DIR, ahora, hoy, load_evaluacion, load_lgbm_params
 from precios.features.build import anadir_objetivos, construir_features
 from precios.logging_setup import setup_logging
 from precios.models import registry
@@ -52,7 +51,7 @@ def train(*, forzar: bool = False) -> Path:
     panel, _ = cargar_panel_apto(solo_aptas=cfg.solo_series_aptas)
     commit = registry.commit_actual()
     version_hash = registry.calcular_hash(panel, params, cfg.semilla, commit)
-    version = f"{dt.date.today().isoformat()}_{version_hash}"
+    version = f"{hoy().isoformat()}_{version_hash}"
 
     destino = registry.MODELS_DIR / version
     if destino.exists() and not forzar:
@@ -77,7 +76,7 @@ def train(*, forzar: bool = False) -> Path:
 
     metadata = registry.Metadata(
         version=version,
-        entrenado_en=dt.datetime.now().isoformat(timespec="seconds"),
+        entrenado_en=ahora().isoformat(timespec="seconds"),
         semana_inicio=str(panel["semana"].min().date()),
         semana_fin=str(panel["semana"].max().date()),
         n_series=int(panel.groupby(["producto_id", "plaza_id"], observed=True).ngroups),

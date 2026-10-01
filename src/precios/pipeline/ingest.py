@@ -11,14 +11,13 @@ etapas siguientes puedan terminar sin reentrenar.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import logging
 from pathlib import Path
 
 import pandas as pd
 
-from precios.config import PROCESSED_DIR
+from precios.config import PROCESSED_DIR, ahora
 from precios.data.sources import DataSource, ManualExcelSource, SipsaSoapSource
 from precios.logging_setup import setup_logging
 
@@ -75,7 +74,7 @@ def ingest(
 
     status = {
         "fuente": fuente,
-        "ejecutado_en": dt.datetime.now().isoformat(timespec="seconds"),
+        "ejecutado_en": ahora().isoformat(timespec="seconds"),
         "n_filas": int(len(nuevo)),
         "fecha_min": str(nuevo["fecha"].min().date()),
         "fecha_max": str(fecha_max_nueva.date()),
