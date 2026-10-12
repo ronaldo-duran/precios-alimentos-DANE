@@ -1,1 +1,3 @@
-grupo,n,tasa_ocurrencia_pct
+grupo,n,tasa_ocurrencia_pct,probabilidad_media_pct
+sin alerta,78,11.5,10.5
+alerta activa,12,25.0,33.0
